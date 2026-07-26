@@ -1,9 +1,15 @@
 package config
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authconfig"
+	awgembed "github.com/sampletext32/amneziawg-embed/pkg/wgembed"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 const (
@@ -79,14 +85,8 @@ type AppConfig struct {
 		// The maximum transmission unit (MTU) used on the server-side.
 		// Empty by default.
 		MTU int `yaml:"mtu"`
-		// Temporary AmneziaWG protocol fields; zero means omitted.
-		Amnezia struct {
-			S1 uint32 `yaml:"s1"`
-			S2 uint32 `yaml:"s2"`
-			S3 uint32 `yaml:"s3"`
-			S4 uint32 `yaml:"s4"`
-		} `yaml:"amnezia"`
 	} `yaml:"wireguard"`
+	Amnezia AmneziaConfig `yaml:"amnezia"`
 	// Configure VPN related settings (networking)
 	VPN struct {
 		// The "AllowedIPs" for VPN clients.
@@ -201,4 +201,119 @@ type AppConfig struct {
 		// Defaults to "" (all hosts)
 		Host string `yaml:"host"`
 	} `yaml:"https"`
+}
+
+// AmneziaConfig contains the stable protocol profile shared by the server and
+// client. Server and client sections intentionally contain only their own
+// protocol fields; S1-S4 and H1-H4 are shared.
+type AmneziaConfig struct {
+	Shared AmneziaSharedConfig `yaml:"shared"`
+	Server AmneziaServerConfig `yaml:"server"`
+	Client AmneziaClientConfig `yaml:"client"`
+}
+
+type AmneziaSharedConfig struct {
+	S1 uint32 `yaml:"s1"`
+	S2 uint32 `yaml:"s2"`
+	S3 uint32 `yaml:"s3"`
+	S4 uint32 `yaml:"s4"`
+	H1 string `yaml:"h1"`
+	H2 string `yaml:"h2"`
+	H3 string `yaml:"h3"`
+	H4 string `yaml:"h4"`
+}
+
+type AmneziaServerConfig struct {
+	HeaderProtectionKey string `yaml:"headerProtectionKey"`
+}
+
+type AmneziaClientConfig struct {
+	JC                     uint32 `yaml:"jc"`
+	JMin                   uint32 `yaml:"jmin"`
+	JMax                   uint32 `yaml:"jmax"`
+	I1                     string `yaml:"i1"`
+	I2                     string `yaml:"i2"`
+	I3                     string `yaml:"i3"`
+	I4                     string `yaml:"i4"`
+	I5                     string `yaml:"i5"`
+	ContentPaddingAddition string `yaml:"contentPaddingAddition"`
+	RekeyAfterTime         string `yaml:"rekeyAfterTime"`
+	RekeyTimeout           string `yaml:"rekeyTimeout"`
+	RejectAfterTime        string `yaml:"rejectAfterTime"`
+	KeepaliveTimeout       string `yaml:"keepaliveTimeout"`
+	MaxHandshakeAttempts   string `yaml:"maxHandshakeAttempts"`
+}
+
+func awgUint(v uint32) *uint32 {
+	if v == 0 {
+		return nil
+	}
+	return &v
+}
+
+func awgString(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// ServerDeviceConfig translates application configuration to the adapter's
+// server-side configuration in one place.
+func (c AmneziaConfig) ServerDeviceConfig() awgembed.AmneziaConfig {
+	return awgembed.AmneziaConfig{
+		S1: awgUint(c.Shared.S1), S2: awgUint(c.Shared.S2), S3: awgUint(c.Shared.S3), S4: awgUint(c.Shared.S4),
+		H1: awgString(c.Shared.H1), H2: awgString(c.Shared.H2), H3: awgString(c.Shared.H3), H4: awgString(c.Shared.H4),
+		HeaderProtectionKey: c.Server.HeaderProtectionKey,
+	}
+}
+
+var awgRange = regexp.MustCompile(`^(\d+)(?:-(\d+))?$`)
+
+func validateAWGRange(name, value string) (uint64, uint64, error) {
+	if value == "" {
+		return 0, 0, nil
+	}
+	m := awgRange.FindStringSubmatch(strings.TrimSpace(value))
+	if m == nil {
+		return 0, 0, fmt.Errorf("amnezia %s must be a single number or range", name)
+	}
+	lo, _ := strconv.ParseUint(m[1], 10, 64)
+	hi := lo
+	if m[2] != "" {
+		hi, _ = strconv.ParseUint(m[2], 10, 64)
+	}
+	if lo > hi {
+		return 0, 0, fmt.Errorf("amnezia %s range is reversed", name)
+	}
+	return lo, hi, nil
+}
+
+// Validate checks application-level constraints before the device is created.
+func (c AmneziaConfig) Validate() error {
+	if c.Client.JMin > 0 && c.Client.JMax > 0 && c.Client.JMin > c.Client.JMax {
+		return fmt.Errorf("amnezia jmin must be <= jmax")
+	}
+	if c.Server.HeaderProtectionKey != "" {
+		if _, err := wgtypes.ParseKey(c.Server.HeaderProtectionKey); err != nil {
+			return fmt.Errorf("amnezia headerProtectionKey is invalid: %w", err)
+		}
+	}
+	ranges := []struct{ name, value string }{{"h1", c.Shared.H1}, {"h2", c.Shared.H2}, {"h3", c.Shared.H3}, {"h4", c.Shared.H4}, {"contentPaddingAddition", c.Client.ContentPaddingAddition}, {"rekeyAfterTime", c.Client.RekeyAfterTime}, {"rekeyTimeout", c.Client.RekeyTimeout}, {"rejectAfterTime", c.Client.RejectAfterTime}, {"keepaliveTimeout", c.Client.KeepaliveTimeout}, {"maxHandshakeAttempts", c.Client.MaxHandshakeAttempts}}
+	var h [][2]uint64
+	for _, r := range ranges {
+		lo, hi, err := validateAWGRange(r.name, r.value)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(r.name, "h") && r.value != "" {
+			for _, prior := range h {
+				if lo <= prior[1] && prior[0] <= hi {
+					return fmt.Errorf("amnezia %s overlaps another H range", r.name)
+				}
+			}
+			h = append(h, [2]uint64{lo, hi})
+		}
+	}
+	return nil
 }

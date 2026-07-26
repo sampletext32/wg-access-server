@@ -62,10 +62,6 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("wireguard-private-key", "Wireguard private key").Envar("WG_WIREGUARD_PRIVATE_KEY").StringVar(&cmd.AppConfig.WireGuard.PrivateKey)
 	cli.Flag("wireguard-port", "The port that the Wireguard server will listen on").Envar("WG_WIREGUARD_PORT").Default("51820").IntVar(&cmd.AppConfig.WireGuard.Port)
 	cli.Flag("wireguard-mtu", "The maximum transmission unit (MTU) to be used on the server-side interface.").Envar("WG_WIREGUARD_MTU").Default("1420").IntVar(&cmd.AppConfig.WireGuard.MTU)
-	cli.Flag("amnezia-s1", "AmneziaWG S1 value (zero omits it)").Envar("WG_AMNEZIA_S1").Uint32Var(&cmd.AppConfig.WireGuard.Amnezia.S1)
-	cli.Flag("amnezia-s2", "AmneziaWG S2 value (zero omits it)").Envar("WG_AMNEZIA_S2").Uint32Var(&cmd.AppConfig.WireGuard.Amnezia.S2)
-	cli.Flag("amnezia-s3", "AmneziaWG S3 value (zero omits it)").Envar("WG_AMNEZIA_S3").Uint32Var(&cmd.AppConfig.WireGuard.Amnezia.S3)
-	cli.Flag("amnezia-s4", "AmneziaWG S4 value (zero omits it)").Envar("WG_AMNEZIA_S4").Uint32Var(&cmd.AppConfig.WireGuard.Amnezia.S4)
 	cli.Flag("vpn-allowed-ips", "A list of networks that VPN clients will be allowed to connect to via the VPN").Envar("WG_VPN_ALLOWED_IPS").Default("0.0.0.0/0", "::/0").StringsVar(&cmd.AppConfig.VPN.AllowedIPs)
 	cli.Flag("vpn-cidr", "The network CIDR for the VPN").Envar("WG_VPN_CIDR").Default("10.44.0.0/24").StringVar(&cmd.AppConfig.VPN.CIDR)
 	cli.Flag("vpn-cidrv6", "The IPv6 network CIDR for the VPN").Envar("WG_VPN_CIDRV6").Default("fd48:4c4:7aa9::/64").StringVar(&cmd.AppConfig.VPN.CIDRv6)
@@ -160,19 +156,8 @@ func (cmd *servecmd) Run() {
 				Address:    vpnipstrings,
 				ListenPort: &conf.WireGuard.Port,
 				MTU:        &conf.WireGuard.MTU,
+				Amnezia:    conf.Amnezia.ServerDeviceConfig(),
 			},
-		}
-		if v := conf.WireGuard.Amnezia.S1; v != 0 {
-			wgconfig.Interface.Amnezia.S1 = &v
-		}
-		if v := conf.WireGuard.Amnezia.S2; v != 0 {
-			wgconfig.Interface.Amnezia.S2 = &v
-		}
-		if v := conf.WireGuard.Amnezia.S3; v != 0 {
-			wgconfig.Interface.Amnezia.S3 = &v
-		}
-		if v := conf.WireGuard.Amnezia.S4; v != 0 {
-			wgconfig.Interface.Amnezia.S4 = &v
 		}
 
 		if err := wg.LoadConfig(wgconfig); err != nil {
@@ -462,6 +447,9 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 	}
 	if len(cmd.AppConfig.ClientConfig.DNSServers) == 1 {
 		cmd.AppConfig.ClientConfig.DNSServers = splitByCommaAndTrim(cmd.AppConfig.ClientConfig.DNSServers[0])
+	}
+	if err := cmd.AppConfig.Amnezia.Validate(); err != nil {
+		logrus.Fatal(err)
 	}
 
 	return &cmd.AppConfig
