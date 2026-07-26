@@ -14,7 +14,6 @@ import Input from '@mui/material/Input';
 import InputLabel from '@mui/material/InputLabel';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
-import { codeBlock } from 'common-tags';
 import { makeObservable, observable, runInAction } from 'mobx';
 import { observer } from 'mobx-react';
 import React from 'react';
@@ -31,6 +30,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Box from '@mui/material/Box';
 import { Warning } from '@mui/icons-material';
 import { ImportExportDelete } from './ImportExportDelete';
+import { buildAmneziaConfig } from '../amnezia-config';
 
 interface Props {
   onAdd: () => void;
@@ -182,20 +182,39 @@ export const AddDevice = observer(
           dnsInfo.push(info.clientConfigDnsSearchDomain);
         }
 
-        const configFile = codeBlock`
-        [Interface]
-        PrivateKey = ${privateKey}
-        Address = ${device.address}
-        ${0 < dnsInfo.length && `DNS = ${dnsInfo.join(', ')}`}
-        ${info.clientConfigMtu != 0 && `MTU = ${info.clientConfigMtu}`}
-
-        [Peer]
-        PublicKey = ${info.publicKey}
-        AllowedIPs = ${info.allowedIps}
-        Endpoint = ${`${info.host?.value || window.location.hostname}:${info.port || '51820'}`}
-        ${this.useDevicePresharekey ? `PresharedKey = ${presharedKey}` : ``}
-        ${this.persistentKeepalive > 0 ? `PersistentKeepalive = ${this.persistentKeepalive}` : ``}
-      `;
+        const configFile = buildAmneziaConfig({
+          privateKey,
+          address: device.address,
+          dns: dnsInfo.length > 0 ? dnsInfo.join(', ') : undefined,
+          mtu: info.clientConfigMtu,
+          publicKey: info.publicKey,
+          presharedKey: this.useDevicePresharekey ? presharedKey : undefined,
+          endpoint: `${info.host?.value || window.location.hostname}:${info.port || '51820'}`,
+          allowedIps: info.allowedIps,
+          persistentKeepalive: this.persistentKeepalive,
+          jc: info.amneziaJc,
+          jmin: info.amneziaJmin,
+          jmax: info.amneziaJmax,
+          s1: info.amneziaS1,
+          s2: info.amneziaS2,
+          s3: info.amneziaS3,
+          s4: info.amneziaS4,
+          h1: info.amneziaH1,
+          h2: info.amneziaH2,
+          h3: info.amneziaH3,
+          h4: info.amneziaH4,
+          i1: info.amneziaI1,
+          i2: info.amneziaI2,
+          i3: info.amneziaI3,
+          i4: info.amneziaI4,
+          i5: info.amneziaI5,
+          contentPaddingAddition: info.amneziaContentPaddingAddition,
+          rekeyAfterTime: info.amneziaRekeyAfterTime,
+          rekeyTimeout: info.amneziaRekeyTimeout,
+          rejectAfterTime: info.amneziaRejectAfterTime,
+          keepaliveTimeout: info.amneziaKeepaliveTimeout,
+          maxHandshakeAttempts: info.amneziaMaxHandshakeAttempts,
+        });
 
         this.setConfigFile(configFile)
         this.setDialogOpen(true)

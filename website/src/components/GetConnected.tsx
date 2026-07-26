@@ -36,7 +36,7 @@ export class GetConnected extends Component<PropsWithChildren<Props>, any> {
   download = () => {
     const info = AppState.info!;
     download({
-      filename: info.filename.length > 0 ? info.filename + '.conf' : 'WireGuard.conf',
+      filename: info.filename.length > 0 ? `amneziawg-${info.filename}.conf` : 'amneziawg.conf',
       content: this.props.configFile,
     });
   };
@@ -65,7 +65,7 @@ export class GetConnected extends Component<PropsWithChildren<Props>, any> {
           <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
             <List>
               <ListItem>
-                <ListItemText style={{ width: 300 }} primary="1. Install the WireGuard App" />
+                <ListItemText style={{ width: 300 }} primary="1. Install the AmneziaWG App" />
                 <ButtonGroup size="large" color="primary" aria-label="large outlined primary button group">
                   <Button onClick={() => this.go('https://www.WireGuard.com/install/')}>
                     <LinuxIcon />
@@ -85,7 +85,7 @@ export class GetConnected extends Component<PropsWithChildren<Props>, any> {
                 </Button>
               </ListItem>
               <ListItem>
-                <ListItemText style={{ width: 300 }} primary="3. Import your connection file in the App" />
+                <ListItemText style={{ width: 300 }} primary="3. Import this configuration into the AmneziaWG client." />
               </ListItem>
             </List>
           </Box>
@@ -97,13 +97,13 @@ export class GetConnected extends Component<PropsWithChildren<Props>, any> {
               <Box>
                 <List>
                   <ListItem>
-                    <ListItemText primary="1. Install the WireGuard app" />
+                    <ListItemText primary="1. Install the AmneziaWG app" />
                   </ListItem>
                   <ListItem>
                     <ListItemText primary="2. Add a tunnel" />
                   </ListItem>
                   <ListItem>
-                    <ListItemText primary="3. Create from QR code" />
+                    <ListItemText primary="3. Import this configuration into the AmneziaWG client." />
                   </ListItem>
                 </List>
               </Box>
