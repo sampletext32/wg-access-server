@@ -2,8 +2,7 @@
 FROM --platform=$BUILDPLATFORM node:26.4.0-bookworm AS website
 WORKDIR /code
 COPY ./website/package.json ./
-COPY ./website/package-lock.json ./
-RUN npm ci --no-audit --prefer-offline
+RUN npm install --no-package-lock --no-audit --prefer-offline
 COPY ./website/ ./
 RUN npm run build
 
@@ -30,11 +29,16 @@ RUN go build -o wg-access-server
 
 ### Server
 FROM alpine:3.24.1
-RUN apk add --no-cache iptables ip6tables wireguard-tools curl openssl
+RUN apk add --no-cache iptables ip6tables curl openssl
 ENV WG_CONFIG="/config.yaml"
 ENV WG_STORAGE="sqlite3:///data/db.sqlite3"
+ARG VERSION=development
+ARG COMMIT="-"
+LABEL org.opencontainers.image.source="https://github.com/sampletext32/wg-access-server" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.version="${VERSION}"
 COPY --from=server /code/wg-access-server /usr/local/bin/wg-access-server
 COPY --from=website /code/build /website/build
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
-CMD ["wg-access-server", "serve"]
+ENTRYPOINT ["/usr/local/bin/wg-access-server", "serve"]
