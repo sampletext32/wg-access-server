@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

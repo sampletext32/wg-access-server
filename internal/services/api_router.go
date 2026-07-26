@@ -6,7 +6,7 @@ import (
 	"math"
 	"net/http"
 
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcLogrus "github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	grpcRecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"

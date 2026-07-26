@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 

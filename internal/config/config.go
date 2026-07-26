@@ -79,6 +79,13 @@ type AppConfig struct {
 		// The maximum transmission unit (MTU) used on the server-side.
 		// Empty by default.
 		MTU int `yaml:"mtu"`
+		// Temporary AmneziaWG protocol fields; zero means omitted.
+		Amnezia struct {
+			S1 uint32 `yaml:"s1"`
+			S2 uint32 `yaml:"s2"`
+			S3 uint32 `yaml:"s3"`
+			S4 uint32 `yaml:"s4"`
+		} `yaml:"amnezia"`
 	} `yaml:"wireguard"`
 	// Configure VPN related settings (networking)
 	VPN struct {
