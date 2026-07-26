@@ -35,4 +35,26 @@ message InfoRes {
   proto.BuildInfo build_info = 16;
   int32 mtu = 17;
   int32 client_config_persistent_keepalive = 18;
+  uint32 amnezia_jc = 19;
+  uint32 amnezia_jmin = 20;
+  uint32 amnezia_jmax = 21;
+  uint32 amnezia_s1 = 22;
+  uint32 amnezia_s2 = 23;
+  uint32 amnezia_s3 = 24;
+  uint32 amnezia_s4 = 25;
+  string amnezia_h1 = 26;
+  string amnezia_h2 = 27;
+  string amnezia_h3 = 28;
+  string amnezia_h4 = 29;
+  string amnezia_i1 = 30;
+  string amnezia_i2 = 31;
+  string amnezia_i3 = 32;
+  string amnezia_i4 = 33;
+  string amnezia_i5 = 34;
+  string amnezia_content_padding_addition = 35;
+  string amnezia_rekey_after_time = 36;
+  string amnezia_rekey_timeout = 37;
+  string amnezia_reject_after_time = 38;
+  string amnezia_keepalive_timeout = 39;
+  string amnezia_max_handshake_attempts = 40;
 }

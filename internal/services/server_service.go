@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -77,6 +77,28 @@ func (s *ServerService) Info(ctx context.Context, req *proto.InfoReq) (*proto.In
 		ClientConfigPersistentKeepalive: int32(s.Config.ClientConfig.PersistentKeepalive),
 		BuildInfo:                       &proto.BuildInfo{Version: buildinfo.Version(), Commit: buildinfo.ShortCommitHash()},
 		Mtu:                             int32(s.Config.WireGuard.MTU),
+		AmneziaJc:                       s.Config.Amnezia.Client.JC,
+		AmneziaJmin:                     s.Config.Amnezia.Client.JMin,
+		AmneziaJmax:                     s.Config.Amnezia.Client.JMax,
+		AmneziaS1:                       s.Config.Amnezia.Shared.S1,
+		AmneziaS2:                       s.Config.Amnezia.Shared.S2,
+		AmneziaS3:                       s.Config.Amnezia.Shared.S3,
+		AmneziaS4:                       s.Config.Amnezia.Shared.S4,
+		AmneziaH1:                       s.Config.Amnezia.Shared.H1,
+		AmneziaH2:                       s.Config.Amnezia.Shared.H2,
+		AmneziaH3:                       s.Config.Amnezia.Shared.H3,
+		AmneziaH4:                       s.Config.Amnezia.Shared.H4,
+		AmneziaI1:                       s.Config.Amnezia.Client.I1,
+		AmneziaI2:                       s.Config.Amnezia.Client.I2,
+		AmneziaI3:                       s.Config.Amnezia.Client.I3,
+		AmneziaI4:                       s.Config.Amnezia.Client.I4,
+		AmneziaI5:                       s.Config.Amnezia.Client.I5,
+		AmneziaContentPaddingAddition:   s.Config.Amnezia.Client.ContentPaddingAddition,
+		AmneziaRekeyAfterTime:           s.Config.Amnezia.Client.RekeyAfterTime,
+		AmneziaRekeyTimeout:             s.Config.Amnezia.Client.RekeyTimeout,
+		AmneziaRejectAfterTime:          s.Config.Amnezia.Client.RejectAfterTime,
+		AmneziaKeepaliveTimeout:         s.Config.Amnezia.Client.KeepaliveTimeout,
+		AmneziaMaxHandshakeAttempts:     s.Config.Amnezia.Client.MaxHandshakeAttempts,
 	}, nil
 }
 

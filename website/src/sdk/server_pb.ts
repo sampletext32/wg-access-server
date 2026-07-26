@@ -127,6 +127,28 @@ export declare namespace InfoRes {
 		buildInfo?: buildinfo.BuildInfo.AsObject,
 		mtu: number,
 		clientConfigPersistentKeepalive: number,
+		amneziaJc: number,
+		amneziaJmin: number,
+		amneziaJmax: number,
+		amneziaS1: number,
+		amneziaS2: number,
+		amneziaS3: number,
+		amneziaS4: number,
+		amneziaH1: string,
+		amneziaH2: string,
+		amneziaH3: string,
+		amneziaH4: string,
+		amneziaI1: string,
+		amneziaI2: string,
+		amneziaI3: string,
+		amneziaI4: string,
+		amneziaI5: string,
+		amneziaContentPaddingAddition: string,
+		amneziaRekeyAfterTime: string,
+		amneziaRekeyTimeout: string,
+		amneziaRejectAfterTime: string,
+		amneziaKeepaliveTimeout: string,
+		amneziaMaxHandshakeAttempts: string,
 	}
 }
 
@@ -271,6 +293,160 @@ export class InfoRes extends jspb.Message {
 		(jspb.Message as any).setProto3IntField(this, 18, value);
 	}
 
+	getAmneziaJc(): number {return jspb.Message.getFieldWithDefault(this, 19, 0);
+	}
+
+	setAmneziaJc(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 19, value);
+	}
+
+	getAmneziaJmin(): number {return jspb.Message.getFieldWithDefault(this, 20, 0);
+	}
+
+	setAmneziaJmin(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 20, value);
+	}
+
+	getAmneziaJmax(): number {return jspb.Message.getFieldWithDefault(this, 21, 0);
+	}
+
+	setAmneziaJmax(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 21, value);
+	}
+
+	getAmneziaS1(): number {return jspb.Message.getFieldWithDefault(this, 22, 0);
+	}
+
+	setAmneziaS1(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 22, value);
+	}
+
+	getAmneziaS2(): number {return jspb.Message.getFieldWithDefault(this, 23, 0);
+	}
+
+	setAmneziaS2(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 23, value);
+	}
+
+	getAmneziaS3(): number {return jspb.Message.getFieldWithDefault(this, 24, 0);
+	}
+
+	setAmneziaS3(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 24, value);
+	}
+
+	getAmneziaS4(): number {return jspb.Message.getFieldWithDefault(this, 25, 0);
+	}
+
+	setAmneziaS4(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 25, value);
+	}
+
+	getAmneziaH1(): string {return jspb.Message.getFieldWithDefault(this, 26, "");
+	}
+
+	setAmneziaH1(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 26, value);
+	}
+
+	getAmneziaH2(): string {return jspb.Message.getFieldWithDefault(this, 27, "");
+	}
+
+	setAmneziaH2(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 27, value);
+	}
+
+	getAmneziaH3(): string {return jspb.Message.getFieldWithDefault(this, 28, "");
+	}
+
+	setAmneziaH3(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 28, value);
+	}
+
+	getAmneziaH4(): string {return jspb.Message.getFieldWithDefault(this, 29, "");
+	}
+
+	setAmneziaH4(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 29, value);
+	}
+
+	getAmneziaI1(): string {return jspb.Message.getFieldWithDefault(this, 30, "");
+	}
+
+	setAmneziaI1(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 30, value);
+	}
+
+	getAmneziaI2(): string {return jspb.Message.getFieldWithDefault(this, 31, "");
+	}
+
+	setAmneziaI2(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 31, value);
+	}
+
+	getAmneziaI3(): string {return jspb.Message.getFieldWithDefault(this, 32, "");
+	}
+
+	setAmneziaI3(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 32, value);
+	}
+
+	getAmneziaI4(): string {return jspb.Message.getFieldWithDefault(this, 33, "");
+	}
+
+	setAmneziaI4(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 33, value);
+	}
+
+	getAmneziaI5(): string {return jspb.Message.getFieldWithDefault(this, 34, "");
+	}
+
+	setAmneziaI5(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 34, value);
+	}
+
+	getAmneziaContentPaddingAddition(): string {return jspb.Message.getFieldWithDefault(this, 35, "");
+	}
+
+	setAmneziaContentPaddingAddition(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 35, value);
+	}
+
+	getAmneziaRekeyAfterTime(): string {return jspb.Message.getFieldWithDefault(this, 36, "");
+	}
+
+	setAmneziaRekeyAfterTime(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 36, value);
+	}
+
+	getAmneziaRekeyTimeout(): string {return jspb.Message.getFieldWithDefault(this, 37, "");
+	}
+
+	setAmneziaRekeyTimeout(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 37, value);
+	}
+
+	getAmneziaRejectAfterTime(): string {return jspb.Message.getFieldWithDefault(this, 38, "");
+	}
+
+	setAmneziaRejectAfterTime(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 38, value);
+	}
+
+	getAmneziaKeepaliveTimeout(): string {return jspb.Message.getFieldWithDefault(this, 39, "");
+	}
+
+	setAmneziaKeepaliveTimeout(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 39, value);
+	}
+
+	getAmneziaMaxHandshakeAttempts(): string {return jspb.Message.getFieldWithDefault(this, 40, "");
+	}
+
+	setAmneziaMaxHandshakeAttempts(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 40, value);
+	}
+
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		InfoRes.serializeBinaryToWriter(this, writer);
@@ -298,6 +474,28 @@ export class InfoRes extends jspb.Message {
 			buildInfo: (f = this.getBuildInfo()) && f.toObject(),
 			mtu: this.getMtu(),
 			clientConfigPersistentKeepalive: this.getClientConfigPersistentKeepalive(),
+			amneziaJc: this.getAmneziaJc(),
+			amneziaJmin: this.getAmneziaJmin(),
+			amneziaJmax: this.getAmneziaJmax(),
+			amneziaS1: this.getAmneziaS1(),
+			amneziaS2: this.getAmneziaS2(),
+			amneziaS3: this.getAmneziaS3(),
+			amneziaS4: this.getAmneziaS4(),
+			amneziaH1: this.getAmneziaH1(),
+			amneziaH2: this.getAmneziaH2(),
+			amneziaH3: this.getAmneziaH3(),
+			amneziaH4: this.getAmneziaH4(),
+			amneziaI1: this.getAmneziaI1(),
+			amneziaI2: this.getAmneziaI2(),
+			amneziaI3: this.getAmneziaI3(),
+			amneziaI4: this.getAmneziaI4(),
+			amneziaI5: this.getAmneziaI5(),
+			amneziaContentPaddingAddition: this.getAmneziaContentPaddingAddition(),
+			amneziaRekeyAfterTime: this.getAmneziaRekeyAfterTime(),
+			amneziaRekeyTimeout: this.getAmneziaRekeyTimeout(),
+			amneziaRejectAfterTime: this.getAmneziaRejectAfterTime(),
+			amneziaKeepaliveTimeout: this.getAmneziaKeepaliveTimeout(),
+			amneziaMaxHandshakeAttempts: this.getAmneziaMaxHandshakeAttempts(),
 		};
 	}
 
@@ -373,6 +571,94 @@ export class InfoRes extends jspb.Message {
 		const field18 = message.getClientConfigPersistentKeepalive();
 		if (field18 != 0) {
 			writer.writeInt32(18, field18);
+		}
+		const field19 = message.getAmneziaJc();
+		if (field19 != 0) {
+			writer.writeUint32(19, field19);
+		}
+		const field20 = message.getAmneziaJmin();
+		if (field20 != 0) {
+			writer.writeUint32(20, field20);
+		}
+		const field21 = message.getAmneziaJmax();
+		if (field21 != 0) {
+			writer.writeUint32(21, field21);
+		}
+		const field22 = message.getAmneziaS1();
+		if (field22 != 0) {
+			writer.writeUint32(22, field22);
+		}
+		const field23 = message.getAmneziaS2();
+		if (field23 != 0) {
+			writer.writeUint32(23, field23);
+		}
+		const field24 = message.getAmneziaS3();
+		if (field24 != 0) {
+			writer.writeUint32(24, field24);
+		}
+		const field25 = message.getAmneziaS4();
+		if (field25 != 0) {
+			writer.writeUint32(25, field25);
+		}
+		const field26 = message.getAmneziaH1();
+		if (field26.length > 0) {
+			writer.writeString(26, field26);
+		}
+		const field27 = message.getAmneziaH2();
+		if (field27.length > 0) {
+			writer.writeString(27, field27);
+		}
+		const field28 = message.getAmneziaH3();
+		if (field28.length > 0) {
+			writer.writeString(28, field28);
+		}
+		const field29 = message.getAmneziaH4();
+		if (field29.length > 0) {
+			writer.writeString(29, field29);
+		}
+		const field30 = message.getAmneziaI1();
+		if (field30.length > 0) {
+			writer.writeString(30, field30);
+		}
+		const field31 = message.getAmneziaI2();
+		if (field31.length > 0) {
+			writer.writeString(31, field31);
+		}
+		const field32 = message.getAmneziaI3();
+		if (field32.length > 0) {
+			writer.writeString(32, field32);
+		}
+		const field33 = message.getAmneziaI4();
+		if (field33.length > 0) {
+			writer.writeString(33, field33);
+		}
+		const field34 = message.getAmneziaI5();
+		if (field34.length > 0) {
+			writer.writeString(34, field34);
+		}
+		const field35 = message.getAmneziaContentPaddingAddition();
+		if (field35.length > 0) {
+			writer.writeString(35, field35);
+		}
+		const field36 = message.getAmneziaRekeyAfterTime();
+		if (field36.length > 0) {
+			writer.writeString(36, field36);
+		}
+		const field37 = message.getAmneziaRekeyTimeout();
+		if (field37.length > 0) {
+			writer.writeString(37, field37);
+		}
+		const field38 = message.getAmneziaRejectAfterTime();
+		if (field38.length > 0) {
+			writer.writeString(38, field38);
+		}
+		const field39 = message.getAmneziaKeepaliveTimeout();
+		if (field39.length > 0) {
+			writer.writeString(39, field39);
+		}
+		const field40 = message.getAmneziaMaxHandshakeAttempts();
+		if (field40.length > 0) {
+			writer.writeString(40, field40);
 		}
 	}
 
@@ -464,6 +750,94 @@ export class InfoRes extends jspb.Message {
 				const field18 = reader.readInt32()
 				message.setClientConfigPersistentKeepalive(field18);
 				break;
+			case 19:
+				const field19 = reader.readUint32()
+				message.setAmneziaJc(field19);
+				break;
+			case 20:
+				const field20 = reader.readUint32()
+				message.setAmneziaJmin(field20);
+				break;
+			case 21:
+				const field21 = reader.readUint32()
+				message.setAmneziaJmax(field21);
+				break;
+			case 22:
+				const field22 = reader.readUint32()
+				message.setAmneziaS1(field22);
+				break;
+			case 23:
+				const field23 = reader.readUint32()
+				message.setAmneziaS2(field23);
+				break;
+			case 24:
+				const field24 = reader.readUint32()
+				message.setAmneziaS3(field24);
+				break;
+			case 25:
+				const field25 = reader.readUint32()
+				message.setAmneziaS4(field25);
+				break;
+			case 26:
+				const field26 = reader.readString()
+				message.setAmneziaH1(field26);
+				break;
+			case 27:
+				const field27 = reader.readString()
+				message.setAmneziaH2(field27);
+				break;
+			case 28:
+				const field28 = reader.readString()
+				message.setAmneziaH3(field28);
+				break;
+			case 29:
+				const field29 = reader.readString()
+				message.setAmneziaH4(field29);
+				break;
+			case 30:
+				const field30 = reader.readString()
+				message.setAmneziaI1(field30);
+				break;
+			case 31:
+				const field31 = reader.readString()
+				message.setAmneziaI2(field31);
+				break;
+			case 32:
+				const field32 = reader.readString()
+				message.setAmneziaI3(field32);
+				break;
+			case 33:
+				const field33 = reader.readString()
+				message.setAmneziaI4(field33);
+				break;
+			case 34:
+				const field34 = reader.readString()
+				message.setAmneziaI5(field34);
+				break;
+			case 35:
+				const field35 = reader.readString()
+				message.setAmneziaContentPaddingAddition(field35);
+				break;
+			case 36:
+				const field36 = reader.readString()
+				message.setAmneziaRekeyAfterTime(field36);
+				break;
+			case 37:
+				const field37 = reader.readString()
+				message.setAmneziaRekeyTimeout(field37);
+				break;
+			case 38:
+				const field38 = reader.readString()
+				message.setAmneziaRejectAfterTime(field38);
+				break;
+			case 39:
+				const field39 = reader.readString()
+				message.setAmneziaKeepaliveTimeout(field39);
+				break;
+			case 40:
+				const field40 = reader.readString()
+				message.setAmneziaMaxHandshakeAttempts(field40);
+				break;
 			default:
 				reader.skipField();
 				break;
@@ -506,6 +880,28 @@ function InfoResFromObject(obj: InfoRes.AsObject | undefined): InfoRes | undefin
 	message.setBuildInfo(BuildInfoFromObject(obj.buildInfo));
 	message.setMtu(obj.mtu);
 	message.setClientConfigPersistentKeepalive(obj.clientConfigPersistentKeepalive);
+	message.setAmneziaJc(obj.amneziaJc);
+	message.setAmneziaJmin(obj.amneziaJmin);
+	message.setAmneziaJmax(obj.amneziaJmax);
+	message.setAmneziaS1(obj.amneziaS1);
+	message.setAmneziaS2(obj.amneziaS2);
+	message.setAmneziaS3(obj.amneziaS3);
+	message.setAmneziaS4(obj.amneziaS4);
+	message.setAmneziaH1(obj.amneziaH1);
+	message.setAmneziaH2(obj.amneziaH2);
+	message.setAmneziaH3(obj.amneziaH3);
+	message.setAmneziaH4(obj.amneziaH4);
+	message.setAmneziaI1(obj.amneziaI1);
+	message.setAmneziaI2(obj.amneziaI2);
+	message.setAmneziaI3(obj.amneziaI3);
+	message.setAmneziaI4(obj.amneziaI4);
+	message.setAmneziaI5(obj.amneziaI5);
+	message.setAmneziaContentPaddingAddition(obj.amneziaContentPaddingAddition);
+	message.setAmneziaRekeyAfterTime(obj.amneziaRekeyAfterTime);
+	message.setAmneziaRekeyTimeout(obj.amneziaRekeyTimeout);
+	message.setAmneziaRejectAfterTime(obj.amneziaRejectAfterTime);
+	message.setAmneziaKeepaliveTimeout(obj.amneziaKeepaliveTimeout);
+	message.setAmneziaMaxHandshakeAttempts(obj.amneziaMaxHandshakeAttempts);
 	return message;
 }
 
