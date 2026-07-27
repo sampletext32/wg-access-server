@@ -30,7 +30,7 @@ export default function Navigation() {
       <Toolbar>
         <Title variant="h6">
           <Link to="/" color="inherit" component={NavLink}>
-            <VpnKey /> wg-access-server
+            <VpnKey /> amneziawg-access-server — Birdegop’s ground-up AmneziaWG server
           </Link>
           {AppState.info?.isAdmin && (
             <Chip
