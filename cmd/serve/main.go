@@ -44,6 +44,8 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("port", "The port that the web ui server will listen on").Envar("WG_PORT").Default("8000").IntVar(&cmd.AppConfig.Port)
 	cli.Flag("external-host", "The external origin of the server (e.g. https://mydomain.com)").Envar("WG_EXTERNAL_HOST").StringVar(&cmd.AppConfig.ExternalHost)
 	cli.Flag("storage", "The storage backend connection string").Envar("WG_STORAGE").Default("memory://").StringVar(&cmd.AppConfig.Storage)
+	cli.Flag("storage-conn-max-lifetime", "Maximum lifetime of a SQL connection").Envar("WG_STORAGE_CONN_MAX_LIFETIME").Default((1 * time.Minute).String()).DurationVar(&cmd.AppConfig.StorageConnMaxLifetime)
+	cli.Flag("storage-conn-max-idle-time", "Maximum idle time of a SQL connection").Envar("WG_STORAGE_CONN_MAX_IDLE_TIME").Default((30 * time.Second).String()).DurationVar(&cmd.AppConfig.StorageConnMaxIdleTime)
 	cli.Flag("enable-metadata", "Enable metadata collection (i.e. metrics)").Envar("WG_ENABLE_METADATA").Default("true").BoolVar(&cmd.AppConfig.EnableMetadata)
 	cli.Flag("enable-device-metrics", "Expose device-level metrics on /metrics (requires enable-metadata)").Envar("WG_ENABLE_DEVICE_METRICS").Default("false").BoolVar(&cmd.AppConfig.EnableDeviceMetrics)
 	cli.Flag("metrics-basic-auth-username", "Require basic auth for /metrics (username)").Envar("WG_METRICS_BASIC_AUTH_USERNAME").StringVar(&cmd.AppConfig.Metrics.BasicAuth.Username)
@@ -185,7 +187,10 @@ func (cmd *servecmd) Run() {
 	}
 
 	// Storage
-	storageBackend, err := storage.NewStorage(conf.Storage)
+	storageBackend, err := storage.NewStorageWithOptions(conf.Storage, storage.Options{
+		ConnMaxLifetime: conf.StorageConnMaxLifetime,
+		ConnMaxIdleTime: conf.StorageConnMaxIdleTime,
+	})
 	if err != nil {
 		logrus.Error(errors.Wrap(err, "failed to create storage backend"))
 		return

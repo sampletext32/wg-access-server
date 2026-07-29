@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jinzhu/gorm"
@@ -41,9 +42,10 @@ type SQLStorage struct {
 	db               *gorm.DB
 	sqlType          string
 	connectionString string
+	options          Options
 }
 
-func NewSqlStorage(u *url.URL) *SQLStorage {
+func NewSqlStorage(u *url.URL, options Options) *SQLStorage {
 	var connectionString string
 
 	switch u.Scheme {
@@ -69,24 +71,79 @@ func NewSqlStorage(u *url.URL) *SQLStorage {
 		db:               nil,
 		sqlType:          u.Scheme,
 		connectionString: connectionString,
+		options:          options,
 	}
 }
 
 func pgconn(u *url.URL) string {
-	password, _ := u.User.Password()
-	decodedQuery, err := url.QueryUnescape(u.RawQuery)
-	if err != nil {
-		logrus.Warnf("failed to unescape connection string query parameters - they will be ignored")
-		decodedQuery = ""
+	// Keep the URI form so lib/pq parses query parameters according to the
+	// PostgreSQL URI rules. The previous keyword-DSN conversion passed the raw
+	// URL query through unchanged, turning '&' into part of a parameter value.
+	query := u.Query()
+	if legacyPostgresQuery(u.RawQuery) {
+		query = make(url.Values)
+		for key, value := range parseKeywordQuery(u.RawQuery) {
+			query.Set(key, value)
+		}
 	}
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s %s",
-		u.Hostname(),
-		u.Port(),
-		u.User.Username(),
-		password,
-		strings.TrimLeft(u.Path, "/"),
-		decodedQuery,
-	)
+	if query.Get("target_session_attrs") == "" {
+		query.Set("target_session_attrs", "read-write")
+	}
+	u.RawQuery = query.Encode()
+	u.Scheme = "postgres"
+	return u.String()
+}
+
+var keywordQueryPair = regexp.MustCompile(`\s+[A-Za-z_][A-Za-z0-9_]*\s*=`)
+
+func legacyPostgresQuery(rawQuery string) bool {
+	decoded, err := url.QueryUnescape(rawQuery)
+	return err == nil && !strings.Contains(decoded, "&") && keywordQueryPair.MatchString(decoded)
+}
+
+func parseKeywordQuery(rawQuery string) map[string]string {
+	decoded, err := url.QueryUnescape(rawQuery)
+	if err != nil {
+		return nil
+	}
+
+	result := make(map[string]string)
+	for i := 0; i < len(decoded); {
+		for i < len(decoded) && decoded[i] == ' ' {
+			i++
+		}
+		start := i
+		for i < len(decoded) && decoded[i] != '=' && decoded[i] != ' ' {
+			i++
+		}
+		if i == start || i >= len(decoded) || decoded[i] != '=' {
+			return result
+		}
+		key := decoded[start:i]
+		i++
+		for i < len(decoded) && decoded[i] == ' ' {
+			i++
+		}
+		var value strings.Builder
+		if i < len(decoded) && (decoded[i] == '\'' || decoded[i] == '"') {
+			quote := decoded[i]
+			i++
+			for i < len(decoded) && decoded[i] != quote {
+				value.WriteByte(decoded[i])
+				i++
+			}
+			if i < len(decoded) {
+				i++
+			}
+		} else {
+			for i < len(decoded) && decoded[i] != ' ' {
+				value.WriteByte(decoded[i])
+				i++
+			}
+		}
+		result[key] = value.String()
+	}
+	return result
 }
 
 func mysqlconn(u *url.URL) string {
@@ -111,6 +168,10 @@ func (s *SQLStorage) Open() error {
 		return errors.Wrap(err, fmt.Sprintf("failed to connect to %s", s.sqlType))
 	}
 	s.db = db
+
+	sqlDB := db.DB()
+	sqlDB.SetConnMaxLifetime(s.options.ConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(s.options.ConnMaxIdleTime)
 
 	db.SetLogger(&GormLogger{})
 	db.LogMode(true)
@@ -201,5 +262,17 @@ func (s *SQLStorage) Ping() error {
 	if err := db.Ping(); err != nil {
 		return errors.Wrap(err, "failed to ping db")
 	}
+
+	if s.sqlType == "postgres" {
+		var inRecovery bool
+		var transactionReadOnly string
+		if err := db.QueryRow(`SELECT pg_is_in_recovery(), current_setting('transaction_read_only')`).Scan(&inRecovery, &transactionReadOnly); err != nil {
+			return errors.Wrap(err, "failed to check postgres primary status")
+		}
+		if inRecovery || strings.EqualFold(transactionReadOnly, "on") || strings.EqualFold(transactionReadOnly, "true") {
+			return errors.New("postgres is read-only or in recovery")
+		}
+	}
+
 	return nil
 }

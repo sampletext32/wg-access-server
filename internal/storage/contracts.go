@@ -33,6 +33,19 @@ type Pingable interface {
 	Ping() error
 }
 
+// Options controls the lifetime of SQL connections. Short lifetimes allow a
+// pool to discard connections that were established before a PostgreSQL
+// primary failover.
+type Options struct {
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
+}
+
+var DefaultOptions = Options{
+	ConnMaxLifetime: 1 * time.Minute,
+	ConnMaxIdleTime: 30 * time.Second,
+}
+
 type Callback func(device *Device)
 
 type Device struct {
@@ -60,6 +73,10 @@ type Device struct {
 }
 
 func NewStorage(uri string) (Storage, error) {
+	return NewStorageWithOptions(uri, DefaultOptions)
+}
+
+func NewStorageWithOptions(uri string, options Options) (Storage, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return nil, errors.Wrap(err, "error parsing storage uri")
@@ -77,7 +94,7 @@ func NewStorage(uri string) (Storage, error) {
 		fallthrough
 	case "sqlite3":
 		logrus.Infof("Storing data in SQL backend at %s", u)
-		return NewSqlStorage(u), nil
+		return NewSqlStorage(u, options), nil
 	}
 
 	return nil, fmt.Errorf("unknown storage backend %s", u)

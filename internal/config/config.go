@@ -42,6 +42,10 @@ type AppConfig struct {
 	// Supports memory:// postgresql:// mysql:// sqlite3://
 	// Defaults to memory://
 	Storage string `yaml:"storage"`
+	// Maximum age and idle time for SQL connections. Short values help pools
+	// move to the new Patroni primary after a failover.
+	StorageConnMaxLifetime time.Duration `yaml:"storageConnMaxLifetime"`
+	StorageConnMaxIdleTime time.Duration `yaml:"storageConnMaxIdleTime"`
 	// EnableMetadata allows you to turn on collection of device
 	// metadata including last handshake time & rx/tx bytes
 	EnableMetadata bool `yaml:"enableMetadata"`
