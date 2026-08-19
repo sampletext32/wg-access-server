@@ -134,6 +134,7 @@ See the [Releases section](https://github.com/freifunkMUC/wg-access-server/relea
   - `wg_access_server_devices_connected`: devices with a recent handshake
   - `wg_access_server_devices_bytes_received_total`: sum of received bytes across devices
   - `wg_access_server_devices_bytes_transmitted_total`: sum of transmitted bytes across devices
+  - `wg_access_server_device_connected{device,owner}`, `wg_access_server_device_bytes_received_total{device,owner}`, `wg_access_server_device_bytes_transmitted_total{device,owner}`, `wg_access_server_device_last_handshake_timestamp_seconds{device,owner}`: same, per device
 
 `EnableMetadata` is on by default so the UI always shows last handshake/bytes, while `EnableDeviceMetrics` defaults to `false` so Prometheus doesn't see device-level data unless you opt in. When both flags are enabled, device-specific metrics are exported. Set `metrics.basicAuth.username` and `metrics.basicAuth.passwordHash` (bcrypt) to protect the `/metrics` endpoint with HTTP Basic Auth.
 

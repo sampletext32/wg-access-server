@@ -17,9 +17,66 @@ type MetricsDeps struct {
 	DeviceManager *devices.DeviceManager
 }
 
+var (
+	deviceLabels = []string{"device", "owner"}
+
+	deviceConnectedDesc = prometheus.NewDesc(
+		"wg_access_server_device_connected",
+		"1 if the device is considered connected (recent handshake), 0 otherwise.",
+		deviceLabels, nil,
+	)
+	deviceBytesReceivedDesc = prometheus.NewDesc(
+		"wg_access_server_device_bytes_received_total",
+		"Received bytes for this device (as tracked).",
+		deviceLabels, nil,
+	)
+	deviceBytesTransmittedDesc = prometheus.NewDesc(
+		"wg_access_server_device_bytes_transmitted_total",
+		"Transmitted bytes for this device (as tracked).",
+		deviceLabels, nil,
+	)
+	deviceLastHandshakeDesc = prometheus.NewDesc(
+		"wg_access_server_device_last_handshake_timestamp_seconds",
+		"Unix timestamp of the device's last WireGuard handshake, if any.",
+		deviceLabels, nil,
+	)
+)
+
+// deviceMetricsCollector recomputes gauges from storage on every scrape, so
+// deleted devices don't leave stale series behind like a GaugeVec would.
+type deviceMetricsCollector struct {
+	deviceManager *devices.DeviceManager
+}
+
+func (c *deviceMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- deviceConnectedDesc
+	ch <- deviceBytesReceivedDesc
+	ch <- deviceBytesTransmittedDesc
+	ch <- deviceLastHandshakeDesc
+}
+
+func (c *deviceMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+	devs, err := c.deviceManager.ListAllDevices()
+	if err != nil {
+		return
+	}
+
+	for _, d := range devs {
+		connected := 0.0
+		if d.LastHandshakeTime != nil && devices.IsConnected(*d.LastHandshakeTime) {
+			connected = 1
+		}
+
+		ch <- prometheus.MustNewConstMetric(deviceConnectedDesc, prometheus.GaugeValue, connected, d.Name, d.Owner)
+		ch <- prometheus.MustNewConstMetric(deviceBytesReceivedDesc, prometheus.GaugeValue, float64(d.ReceiveBytes), d.Name, d.Owner)
+		ch <- prometheus.MustNewConstMetric(deviceBytesTransmittedDesc, prometheus.GaugeValue, float64(d.TransmitBytes), d.Name, d.Owner)
+		if d.LastHandshakeTime != nil {
+			ch <- prometheus.MustNewConstMetric(deviceLastHandshakeDesc, prometheus.GaugeValue, float64(d.LastHandshakeTime.Unix()), d.Name, d.Owner)
+		}
+	}
+}
+
 // MetricsHandler returns an http.Handler that exposes Prometheus metrics.
-// Device-level gauges are only registered when both metadata collection and
-// device metrics are enabled, but process/build metrics are always exposed.
 func MetricsHandler(deps *MetricsDeps) http.Handler {
 	reg := prometheus.NewRegistry()
 
@@ -126,6 +183,8 @@ func MetricsHandler(deps *MetricsDeps) http.Handler {
 			return float64(sum)
 		})
 		reg.MustRegister(txBytesTotal)
+
+		reg.MustRegister(&deviceMetricsCollector{deviceManager: deps.DeviceManager})
 	}
 
 	return promhttp.HandlerFor(reg, promhttp.HandlerOpts{EnableOpenMetrics: true})
