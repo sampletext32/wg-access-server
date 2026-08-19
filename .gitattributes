@@ -1,0 +1,6 @@
+# Force LF for shell scripts regardless of the checking-out user's
+# core.autocrlf setting. Shell scripts run inside Linux build/CI stages
+# (see buildinfo/get_version.sh, invoked from Dockerfile) and a CRLF
+# checkout breaks their shebang line with a cryptic
+# "syntax error: unexpected end of file" from /bin/sh.
+*.sh text eol=lf
