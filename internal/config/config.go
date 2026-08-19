@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/freifunkMUC/wg-access-server/internal/amnezia"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authconfig"
-	awgembed "github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
@@ -73,7 +73,7 @@ type AppConfig struct {
 		Enabled bool `yaml:"enabled"`
 		// The network interface name of the WireGuard
 		// network device.
-		// Defaults to wg0
+		// Defaults to awg0
 		Interface string `yaml:"interface"`
 		// The WireGuard PrivateKey
 		// If this value is lost then any existing
@@ -89,6 +89,8 @@ type AppConfig struct {
 		// The maximum transmission unit (MTU) used on the server-side.
 		// Empty by default.
 		MTU int `yaml:"mtu"`
+		// Path to the supervised amneziawg-go child binary.
+		ChildPath string `yaml:"childPath"`
 	} `yaml:"wireguard"`
 	Amnezia AmneziaConfig `yaml:"amnezia"`
 	// Configure VPN related settings (networking)
@@ -264,8 +266,8 @@ func awgString(v string) *string {
 
 // ServerDeviceConfig translates application configuration to the adapter's
 // server-side configuration in one place.
-func (c AmneziaConfig) ServerDeviceConfig() awgembed.AmneziaConfig {
-	return awgembed.AmneziaConfig{
+func (c AmneziaConfig) ServerDeviceConfig() amnezia.AWGConfig {
+	return amnezia.AWGConfig{
 		S1: awgUint(c.Shared.S1), S2: awgUint(c.Shared.S2), S3: awgUint(c.Shared.S3), S4: awgUint(c.Shared.S4),
 		H1: awgString(c.Shared.H1), H2: awgString(c.Shared.H2), H3: awgString(c.Shared.H3), H4: awgString(c.Shared.H4),
 		HeaderProtectionKey: c.Server.HeaderProtectionKey,
@@ -301,6 +303,11 @@ func (c AmneziaConfig) Validate() error {
 	if c.Server.HeaderProtectionKey != "" {
 		if _, err := wgtypes.ParseKey(c.Server.HeaderProtectionKey); err != nil {
 			return fmt.Errorf("amnezia headerProtectionKey is invalid: %w", err)
+		}
+		for name, value := range map[string]uint32{"s1": c.Shared.S1, "s2": c.Shared.S2, "s3": c.Shared.S3, "s4": c.Shared.S4} {
+			if value < 8 {
+				return fmt.Errorf("amnezia %s must be at least 8 when headerProtectionKey is enabled", name)
+			}
 		}
 	}
 	ranges := []struct{ name, value string }{{"h1", c.Shared.H1}, {"h2", c.Shared.H2}, {"h3", c.Shared.H3}, {"h4", c.Shared.H4}, {"contentPaddingAddition", c.Client.ContentPaddingAddition}, {"rekeyAfterTime", c.Client.RekeyAfterTime}, {"rekeyTimeout", c.Client.RekeyTimeout}, {"rejectAfterTime", c.Client.RejectAfterTime}, {"keepaliveTimeout", c.Client.KeepaliveTimeout}, {"maxHandshakeAttempts", c.Client.MaxHandshakeAttempts}}

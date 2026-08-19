@@ -8,7 +8,7 @@ import (
 
 func TestAmneziaConfigValidateAndServerConversion(t *testing.T) {
 	c := AmneziaConfig{
-		Shared: AmneziaSharedConfig{S1: 8, H1: "100-200"},
+		Shared: AmneziaSharedConfig{S1: 8, S2: 8, S3: 8, S4: 8, H1: "100-200"},
 		Server: AmneziaServerConfig{HeaderProtectionKey: (wgtypes.Key{}).String()},
 		Client: AmneziaClientConfig{JC: 3, JMin: 10, JMax: 20, I1: "<b 0x1>"},
 	}

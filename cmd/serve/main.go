@@ -17,7 +17,6 @@ import (
 	"github.com/docker/docker/libnetwork/types"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
-	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/crypto/bcrypt"
@@ -25,6 +24,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/freifunkMUC/wg-access-server/buildinfo"
+	"github.com/freifunkMUC/wg-access-server/internal/amnezia"
 	"github.com/freifunkMUC/wg-access-server/internal/config"
 	"github.com/freifunkMUC/wg-access-server/internal/devices"
 	"github.com/freifunkMUC/wg-access-server/internal/dnsproxy"
@@ -60,10 +60,11 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("https-host", "Listen host for HTTPS server").Envar("WG_HTTPS_HOST").Default("").StringVar(&cmd.AppConfig.HTTPS.Host)
 	cli.Flag("http-host", "Listen host for HTTP server").Envar("WG_HTTP_HOST").Default("").StringVar(&cmd.AppConfig.HttpHost)
 	cli.Flag("wireguard-enabled", "Enable or disable the embedded wireguard server (useful for development)").Envar("WG_WIREGUARD_ENABLED").Default("true").BoolVar(&cmd.AppConfig.WireGuard.Enabled)
-	cli.Flag("wireguard-interface", "Set the wireguard interface name").Default("wg0").Envar("WG_WIREGUARD_INTERFACE").StringVar(&cmd.AppConfig.WireGuard.Interface)
+	cli.Flag("wireguard-interface", "Set the AmneziaWG interface name").Default("awg0").Envar("WG_WIREGUARD_INTERFACE").StringVar(&cmd.AppConfig.WireGuard.Interface)
 	cli.Flag("wireguard-private-key", "Wireguard private key").Envar("WG_WIREGUARD_PRIVATE_KEY").StringVar(&cmd.AppConfig.WireGuard.PrivateKey)
 	cli.Flag("wireguard-port", "The port that the Wireguard server will listen on").Envar("WG_WIREGUARD_PORT").Default("51820").IntVar(&cmd.AppConfig.WireGuard.Port)
 	cli.Flag("wireguard-mtu", "The maximum transmission unit (MTU) to be used on the server-side interface.").Envar("WG_WIREGUARD_MTU").Default("1420").IntVar(&cmd.AppConfig.WireGuard.MTU)
+	cli.Flag("wireguard-child-path", "Path to the amneziawg-go child binary").Envar("WG_WIREGUARD_CHILD_PATH").Default("amneziawg-go").StringVar(&cmd.AppConfig.WireGuard.ChildPath)
 	cli.Flag("vpn-allowed-ips", "A list of networks that VPN clients will be allowed to connect to via the VPN").Envar("WG_VPN_ALLOWED_IPS").Default("0.0.0.0/0", "::/0").StringsVar(&cmd.AppConfig.VPN.AllowedIPs)
 	cli.Flag("vpn-cidr", "The network CIDR for the VPN").Envar("WG_VPN_CIDR").Default("10.44.0.0/24").StringVar(&cmd.AppConfig.VPN.CIDR)
 	cli.Flag("vpn-cidrv6", "The IPv6 network CIDR for the VPN").Envar("WG_VPN_CIDRV6").Default("fd48:4c4:7aa9::/64").StringVar(&cmd.AppConfig.VPN.CIDRv6)
@@ -137,13 +138,12 @@ func (cmd *servecmd) Run() {
 	}
 
 	// WireGuard Server
-	wg := wgembed.NewNoOpInterface()
+	wg := amnezia.NewNoOp()
 	if conf.WireGuard.Enabled {
-		wgOpts := wgembed.Options{
-			InterfaceName:     conf.WireGuard.Interface,
-			AllowKernelModule: true,
-		}
-		wgimpl, err := wgembed.NewWithOpts(wgOpts)
+		wgimpl, err := amnezia.New(amnezia.Options{
+			InterfaceName: conf.WireGuard.Interface,
+			ChildPath:     conf.WireGuard.ChildPath,
+		})
 		if err != nil {
 			logrus.Fatal(errors.Wrap(err, "failed to create WireGuard interface"))
 		}
@@ -152,17 +152,13 @@ func (cmd *servecmd) Run() {
 
 		logrus.Infof("Starting WireGuard on :%d", conf.WireGuard.Port)
 
-		wgconfig := &wgembed.ConfigFile{
-			Interface: wgembed.IfaceConfig{
-				PrivateKey: conf.WireGuard.PrivateKey,
-				Address:    vpnipstrings,
-				ListenPort: &conf.WireGuard.Port,
-				MTU:        &conf.WireGuard.MTU,
-				Amnezia:    conf.Amnezia.ServerDeviceConfig(),
-			},
-		}
-
-		if err := wg.LoadConfig(wgconfig); err != nil {
+		if err := wg.Configure(amnezia.DeviceConfig{
+			PrivateKey: conf.WireGuard.PrivateKey,
+			Address:    vpnipstrings,
+			ListenPort: conf.WireGuard.Port,
+			MTU:        conf.WireGuard.MTU,
+			AWG:        conf.Amnezia.ServerDeviceConfig(),
+		}); err != nil {
 			logrus.Error(errors.Wrap(err, "failed to load WireGuard config"))
 			return
 		}

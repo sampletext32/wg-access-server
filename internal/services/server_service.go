@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus/ctxlogrus"
-	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/freifunkMUC/wg-access-server/buildinfo"
+	"github.com/freifunkMUC/wg-access-server/internal/amnezia"
 	"github.com/freifunkMUC/wg-access-server/internal/config"
 	"github.com/freifunkMUC/wg-access-server/internal/network"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
@@ -19,7 +19,7 @@ import (
 type ServerService struct {
 	proto.UnimplementedServerServer
 	Config *config.AppConfig
-	Wg     wgembed.WireGuardInterface
+	Wg     amnezia.Interface
 }
 
 func (s *ServerService) Info(ctx context.Context, req *proto.InfoReq) (*proto.InfoRes, error) {

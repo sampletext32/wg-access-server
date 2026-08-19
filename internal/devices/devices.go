@@ -7,17 +7,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
+	"github.com/freifunkMUC/wg-access-server/internal/amnezia"
 	"github.com/freifunkMUC/wg-access-server/internal/network"
 	"github.com/freifunkMUC/wg-access-server/internal/storage"
 	"github.com/freifunkMUC/wg-access-server/pkg/authnz/authsession"
 )
 
 type DeviceManager struct {
-	wg      wgembed.WireGuardInterface
+	wg      amnezia.Interface
 	storage storage.Storage
 	cidr    string
 	cidrv6  string
@@ -31,7 +31,7 @@ type User struct {
 // https://lists.zx2c4.com/pipermail/wireguard/2020-December/006222.html
 var wgKeyRegex = regexp.MustCompile("^[A-Za-z0-9+/]{42}[A|E|I|M|Q|U|Y|c|g|k|o|s|w|4|8|0]=$")
 
-func New(wg wgembed.WireGuardInterface, s storage.Storage, cidr, cidrv6 string) *DeviceManager {
+func New(wg amnezia.Interface, s storage.Storage, cidr, cidrv6 string) *DeviceManager {
 	return &DeviceManager{wg, s, cidr, cidrv6}
 }
 
@@ -263,9 +263,9 @@ func (d *DeviceManager) sync() error {
 
 	// Remove any peers for devices that are no longer in storage
 	for _, peer := range peers {
-		if !deviceListContains(devices, peer.PublicKey.String()) {
-			if err := d.wg.RemovePeer(peer.PublicKey.String()); err != nil {
-				logrus.Error(errors.Wrapf(err, "failed to remove peer during sync: %s", peer.PublicKey.String()))
+		if !deviceListContains(devices, peer.PublicKey) {
+			if err := d.wg.RemovePeer(peer.PublicKey); err != nil {
+				logrus.Error(errors.Wrapf(err, "failed to remove peer during sync: %s", peer.PublicKey))
 			}
 		}
 	}

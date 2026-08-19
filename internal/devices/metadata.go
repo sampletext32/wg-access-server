@@ -29,7 +29,7 @@ func syncMetrics(d *DeviceManager) {
 		// but aren't connected at the moment.
 		// they may actually be connected to another replica.
 		if peer.Endpoint != nil {
-			if device, err := d.GetByPublicKey(peer.PublicKey.String()); err == nil {
+			if device, err := d.GetByPublicKey(peer.PublicKey); err == nil {
 				if !IsConnected(peer.LastHandshakeTime) && device.LastHandshakeTime != nil && !IsConnected(*device.LastHandshakeTime) {
 					// Not connected, and we haven't been the last time either, nothing to update
 					continue

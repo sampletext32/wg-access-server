@@ -26,6 +26,7 @@ COPY ./buildinfo/ ./buildinfo/
 RUN echo "Using: Version: ${VERSION}, Commit: ${COMMIT}"
 RUN go generate buildinfo/buildinfo.go
 RUN go build -o wg-access-server
+RUN go build -o amneziawg-go ./cmd/amneziawg-go
 
 ### Server
 FROM alpine:3.24.1
@@ -38,6 +39,7 @@ LABEL org.opencontainers.image.source="https://github.com/sampletext32/wg-access
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.version="${VERSION}"
 COPY --from=server /code/wg-access-server /usr/local/bin/wg-access-server
+COPY --from=server /code/amneziawg-go /usr/local/bin/amneziawg-go
 COPY --from=website /code/build /website/build
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1

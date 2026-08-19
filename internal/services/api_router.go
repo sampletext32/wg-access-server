@@ -6,7 +6,6 @@ import (
 	"math"
 	"net/http"
 
-	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcLogrus "github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	grpcRecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
@@ -15,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/freifunkMUC/wg-access-server/internal/amnezia"
 	"github.com/freifunkMUC/wg-access-server/internal/config"
 	"github.com/freifunkMUC/wg-access-server/internal/devices"
 	"github.com/freifunkMUC/wg-access-server/internal/traces"
@@ -25,7 +25,7 @@ import (
 type ApiServices struct {
 	Config        *config.AppConfig
 	DeviceManager *devices.DeviceManager
-	Wg            wgembed.WireGuardInterface
+	Wg            amnezia.Interface
 }
 
 func ApiRouter(deps *ApiServices) http.Handler {
