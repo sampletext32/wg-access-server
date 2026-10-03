@@ -1,0 +1,168 @@
+# Storage
+
+wg-access-server supports 4 storage backends.
+
+| Backend  | Persistent | Supports HA | Use Case                                 |
+| -------- | ---------- | ----------- | ---------------------------------------- |
+| memory   | ❌         | ❌          | Local development                        |
+| sqlite3  | ✔️         | ❌          | Production - single instance deployments |
+| postgres | ✔️         | ✔️          | Production - multi instance deployments  |
+| mysql    | ✔️         | ❌          | Production - single instance deployments |
+
+## Backends
+
+### Memory
+
+This is the default backend if you're running the binary directly and haven't configured
+another storage backend. Data will be lost between restarts. Handy for development.
+
+### SQLite3
+
+This is the default backend if you're running the docker container directly or using docker-compose.
+
+The database file will be written to `/data/db.sqlite3` within the container by default.
+
+Sqlite3 is probably the simplest storage backend to get started with because it doesn't require
+any additional setup to be done. It should work out of the box and should be able to support a
+large number of users & devices.
+
+Example connection string:
+
+- Relative path: `sqlite3://path/to/db.sqlite3`
+- Absolute path: `sqlite3:///absolute/path/to/db.sqlite3`
+
+!!! note "Upgrading an existing SQLite database"
+
+    v1.3.0 moved to a newer database library, which spells a few column types differently
+    (`text` instead of `varchar(255)`, `integer` instead of `bigint`). SQLite treats them
+    the same, but it cannot change a column type in place, so the first start after the
+    upgrade rebuilds the `devices` table once. The data is carried over, and later starts
+    leave the table alone. PostgreSQL and MySQL schemas are unchanged.
+
+### PostgreSQL
+
+This backend requires an external Postgres database to be deployed. Every release is tested against
+PostgreSQL 13 and 18, the oldest and the newest version their vendor supports; the versions in
+between are expected to work and are checked before releases.
+
+Postgres experimentally supports highly-available deployments of wg-access-server
+and is the recommended storage backend where possible.
+If you have pgbouncer running in front of PostgreSQL, make sure it is running in "Session pooling" mode,
+as the more aggressive modes like "Transaction Pooling" break LISTEN/NOTIFY which we rely on.
+They also break the session-level advisory lock that keeps replicas from assigning the same VPN
+address to two devices created at the same time.
+
+Example connection string:
+
+- `postgresql://user:password@localhost:5432/database?sslmode=disable`
+
+#### What the replicas send each other
+
+The replicas learn about a change through `LISTEN`/`NOTIFY`. Those notifications say that the
+devices table changed and nothing more: which device it was, and what is in its row, is not part of
+them. Every replica reads the devices from the database instead, as the user it connects as.
+
+This matters because a notification reaches **every connection that listens on the channel**, and
+Postgres applies no table privileges to it. A database user who may connect but may not read the
+devices would otherwise see every one of them as it is written, with its addresses, its owner's
+identity and its pre-shared key. Sharing the database with another application, or having a
+read-only user for reports, is enough for that to matter.
+
+What it costs: a change makes each replica read the devices once, rather than apply the row it was
+handed. The reads are coalesced - one runs at a time and one more is remembered - so importing many
+devices at once does not read them once per device.
+
+### MySQL
+
+This backend requires an external MySQL database to be deployed. Every release is tested against
+MySQL 8.0 and 9, and against MariaDB 11.4 - other flavours are expected to work, as wg-access-server
+talks to all of them through [this golang driver](https://github.com/go-sql-driver/mysql).
+
+Example connection string:
+
+- `mysql://user:password@localhost:3306/database?tls=false`
+
+!!! warning "Upgrading an older MySQL installation"
+
+    Up to and including v1.2.0 the schema migration failed silently on MySQL, which left the
+    database without the unique index on `public_key`. Two devices could then share a public
+    key. The WireGuard peer is identified by that key, so the device added last replaces the
+    allowed addresses and the pre-shared key of the one added first, and that first device
+    stops working. From v1.3.0 on the index is created when the server starts. If the table
+    already holds devices sharing a key, the server refuses to start and tells you how to
+    find them:
+
+    ```sql
+    SELECT public_key, COUNT(*) FROM devices GROUP BY public_key HAVING COUNT(*) > 1;
+    ```
+
+    Delete all but one device per key - they cannot all work anyway - and start the server again.
+    PostgreSQL and SQLite were never affected.
+
+Query parameters are passed to the driver as-is, so they must use its names - e.g. `tls` rather
+than `ssl-mode`. The driver runs any parameter it does not know as `SET <name>=<value>` on the
+server, which for `ssl-mode` fails with a syntax error. wg-access-server always sets
+`parseTime=true`, which it needs to read devices.
+
+### File (removed)
+
+The `file://` backend was deprecated in 0.3.0 and has been removed in 0.4.0
+
+If you'd like to migrate your `file://` storage to a supported backend you must use
+version 0.3.0 and then follow the migration guide below to migrate to a different storage backend.
+
+_Note that the migration tool itself doesn't support the `file://` backend on versions
+released after 0.3.0_.
+
+## Schema Upgrades
+
+The SQL backends keep track of their schema: every change to it is a migration that runs once per
+database, and the ones already applied are listed in the `schema_migrations` table. On start,
+wg-access-server applies whatever is missing and logs each one (`Applying database migration ...`).
+
+- **Upgrading from a version without migrations** needs nothing: the existing tables are taken over
+  as they are, and the first start records them.
+- **Several replicas** sharing a PostgreSQL or MySQL database take turns: one migrates while the
+  others wait for it, up to 10 minutes.
+- **Downgrading** is refused once a newer version has migrated the database - the start fails,
+  naming the migrations this version does not know. The newer schema may not fit what the older
+  version writes. Run the newer version again, or restore a backup taken before the upgrade.
+- **MySQL** cannot roll back changes to the schema. If a migration fails there, fix the cause and
+  start again: a migration that was interrupted completes on the next start.
+
+Take a backup before upgrading, as with any database.
+
+## Migration Between Backends
+
+You can migrate your registered devices, API tokens and users - with the passwords they set for
+themselves, their second factors and their passkeys - between backends using the
+`wg-access-server migrate <src> <dest>` command. Stop the server first: devices added while the
+migration runs are left behind.
+
+The migrate command was added in `v0.3.0` and is provided on a _best effort_ level. As an open source
+project any community support here is warmly welcomed.
+
+### Example: `file://` to `sqlite3://`
+
+If you're using the now deprecated `file://` backend you can migrate to `sqlite3://` like this:
+
+```bash
+# after upgrading to place1/wg-access-server:v0.3.0
+docker exec -it <container-name> wg-access-server migrate file:///data sqlite3:///data/db.sqlite3
+```
+
+If you need to do the above within a kubernetes deployment substitute `docker exec` with the equivalent
+`kubectl exec` command.
+
+The migrate command is non-destructive but it's always a good idea to take a backup of your data first!
+
+### Example: `sqlite3://` to `postgresql://`
+
+First you'll need to make sure your postgres server is up and that you can connect to it from your
+wg-access-server container/pod/vm.
+
+```bash
+wg-access-server migrate sqlite3:///data/db.sqlite3 postgresql://user:password@localhost:5432/database?sslmode=disable
+```
+
+Remember to update your wg-access-server config to connect to postgres 😀

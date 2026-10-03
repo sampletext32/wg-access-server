@@ -1,0 +1,389 @@
+package serve
+
+import (
+	"fmt"
+	"net/netip"
+	"os"
+	"regexp"
+	"strings"
+
+	"github.com/goccy/go-yaml"
+	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
+	"golang.org/x/crypto/bcrypt"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+
+	"github.com/freifunkMUC/wg-access-server/internal/authnz/authconfig"
+	"github.com/freifunkMUC/wg-access-server/internal/config"
+	"github.com/freifunkMUC/wg-access-server/internal/network"
+	"github.com/freifunkMUC/wg-access-server/internal/resolvconf"
+)
+
+// unknownField picks the field name out of the decoder's error. The error
+// itself quotes the offending line of the file, so it must not be logged: a
+// misspelled 'adminPassword' would put the password in the log.
+var unknownField = regexp.MustCompile(`unknown field "([^"]+)"`)
+
+// configFileError describes a configuration file that cannot be decoded
+// without quoting it. The decoder's own message shows the lines around the
+// problem, and those can hold adminPassword, a client secret or a private key.
+func configFileError(err error) error {
+	return fmt.Errorf("failed to bind configuration file: %s", yaml.FormatError(err, false, false))
+}
+
+// warnAboutUnknownKeys reports keys the configuration does not have a home
+// for. They are dropped without a word otherwise, so a setting under the
+// wrong heading - externalHost under 'wireguard:', where it does not belong -
+// reads as configured and does nothing.
+//
+// A warning, never a refusal to start: a file written for a newer version, or
+// carrying a key that has since been removed, must not keep a server down.
+func warnAboutUnknownKeys(document []byte) {
+	var probe config.AppConfig
+	err := yaml.UnmarshalWithOptions(document, &probe, yaml.DisallowUnknownField())
+	if err == nil {
+		return
+	}
+
+	// Only the name, never the error text, and never the value beside it.
+	if found := unknownField.FindStringSubmatch(err.Error()); found != nil {
+		logrus.Warnf("the config file sets '%s', which this version does not know - it is being ignored. A setting under the wrong heading looks like this too", found[1])
+		return
+	}
+
+	// Some other complaint about the document. The decode below reports it
+	// properly if it matters, so say only that this check found something.
+	logrus.Warn("the config file could not be checked for unknown settings")
+}
+
+// fileOverridesEnv pairs a config file key with the environment variable that
+// sets the same thing, for the settings where the file quietly winning is
+// expensive: an admin account that turns out not to exist, or a database that
+// is not the one that was meant.
+//
+// The precedence is deliberate - the file is read last, and the comment on
+// ReadConfig has always said so - but nothing said it at the moment it
+// happened, and being locked out of the web UI is a poor way to find out.
+var fileOverridesEnv = []struct{ key, envar string }{
+	{"adminUsername", "WG_ADMIN_USERNAME"},
+	{"adminPassword", "WG_ADMIN_PASSWORD"},
+	{"storage", "WG_STORAGE"},
+	{"externalHost", "WG_EXTERNAL_HOST"},
+	{"port", "WG_PORT"},
+}
+
+// warnAboutOverriddenEnv reports the keys the config file sets that were also
+// given in the environment. document is the file as it parsed, before it is
+// decoded into the configuration.
+func warnAboutOverriddenEnv(document any) {
+	keys, ok := document.(map[string]any)
+	if !ok {
+		return
+	}
+	for _, both := range fileOverridesEnv {
+		if _, inFile := keys[both.key]; !inFile {
+			continue
+		}
+		if _, inEnv := os.LookupEnv(both.envar); !inEnv {
+			continue
+		}
+		logrus.Warnf("%s is set, but the config file also sets '%s'. The config file is read last and wins, so %s has no effect - remove one of the two", both.envar, both.key, both.envar)
+	}
+}
+
+// ReadConfig reads the config file from disk if specified and overrides any env vars or cmdline options
+func (cmd *servecmd) ReadConfig() *config.AppConfig {
+	if cmd.ConfigFilePath != "" {
+		b, err := os.ReadFile(cmd.ConfigFilePath)
+		if err != nil {
+			logrus.Fatal(fmt.Errorf("failed to read configuration file: %w", err))
+		}
+		// A file that configures nothing - the empty one the container image
+		// ships, or one with only comments - has to leave the flags and the
+		// environment as they are. Decoding it into the configuration would
+		// hand us a document that is null, and that clears every field.
+		var configured any
+		if err := yaml.Unmarshal(b, &configured); err != nil {
+			logrus.Fatal(configFileError(err))
+		}
+		if configured != nil {
+			warnAboutOverriddenEnv(configured)
+			warnAboutUnknownKeys(b)
+			if err := yaml.Unmarshal(b, &cmd.AppConfig); err != nil {
+				logrus.Fatal(configFileError(err))
+			}
+		}
+	}
+
+	if err := cmd.loadSecretFiles(); err != nil {
+		logrus.Fatal(err)
+	}
+
+	if cmd.AppConfig.LogLevel != "" {
+		if level, err := logrus.ParseLevel(cmd.AppConfig.LogLevel); err == nil {
+			logrus.SetLevel(level)
+		}
+	}
+
+	if !cmd.AppConfig.EnableMetadata {
+		logrus.Info("Metadata collection has been disabled. No device connectivity information or device metrics will be recorded or shown")
+	} else if !cmd.AppConfig.EnableDeviceMetrics {
+		logrus.Info("Device-level Prometheus metrics are disabled; metadata remains available for the UI")
+	}
+	metricsAuthEnabled := cmd.AppConfig.Metrics.BasicAuth.Username != "" && cmd.AppConfig.Metrics.BasicAuth.PasswordHash != ""
+	if cmd.AppConfig.Metrics.BasicAuth.Username != "" {
+		if !metricsAuthEnabled {
+			logrus.Warn("Metrics basic auth username is set but password hash is missing")
+		} else {
+			logrus.Info("Basic auth is enabled for /metrics")
+		}
+	}
+	if cmd.AppConfig.EnableMetadata && cmd.AppConfig.EnableDeviceMetrics && cmd.AppConfig.Metrics.MaxDeviceSeries != 0 && !metricsAuthEnabled {
+		logrus.Warn("Per-device metrics are exposed on the unauthenticated /metrics endpoint: device names and owner identities are readable by anyone who can reach it")
+	}
+
+	if !cmd.AppConfig.HttpEnabled && !cmd.AppConfig.HTTPS.Enabled {
+		logrus.Fatal("Both the HTTP and the HTTPS listener are disabled - the web UI would not be reachable at all")
+	}
+	if !cmd.AppConfig.HttpEnabled && (cmd.AppConfig.Auth.SessionStore == nil || !cmd.AppConfig.Auth.SessionStore.Secure) {
+		logrus.Info("The web UI is served over HTTPS only: consider setting auth.sessionStore.secure to keep browsers from ever sending the session cookie over plain HTTP")
+	}
+	if cmd.AppConfig.HttpEnabled && cmd.AppConfig.HTTPS.Enabled {
+		// Info, not a warning: serving plain HTTP behind a TLS terminating
+		// proxy is a perfectly normal setup.
+		logrus.Infof("The web UI is also served over plain HTTP on port %d. Unless something in front of it terminates TLS, client configurations and their private keys travel unencrypted - disable it with --no-http-enabled", cmd.AppConfig.Port)
+	}
+
+	if err := validatePolicies(cmd.AppConfig.VPN.Policies, &cmd.AppConfig.Auth); err != nil {
+		logrus.Fatal(err)
+	}
+
+	if err := cmd.AppConfig.Auth.Validate(); err != nil {
+		logrus.Fatal(err)
+	}
+
+	firewall, err := network.ResolveFirewall(cmd.AppConfig.VPN.Firewall, cmd.AppConfig.VPN.DisableIPTables)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	cmd.AppConfig.VPN.Firewall = firewall
+
+	// The rules of a policy are a set per policy and a lookup per packet,
+	// which iptables cannot do without a rule per device and network. The
+	// nftables backend is where they live; saying so at startup beats a
+	// policy that quietly allows everything.
+	if len(cmd.AppConfig.VPN.Policies) > 0 && firewall != network.FirewallNftables {
+		logrus.Fatalf("access policies need vpn.firewall: nftables, but the firewall is %q", firewall)
+	}
+
+	if !cmd.AppConfig.Auth.IsEnabled() {
+		if cmd.AppConfig.AdminPassword == "" {
+			logrus.Fatal("Missing admin password: please set via environment variable, flag or config file")
+		}
+	}
+
+	if cmd.AppConfig.AdminPassword != "" {
+		// set a basic auth entry for the admin user
+		pw, err := bcrypt.GenerateFromPassword([]byte(cmd.AppConfig.AdminPassword), bcrypt.DefaultCost)
+		if err != nil {
+			logrus.Fatal(fmt.Errorf("failed to generate a bcrypt hash for the provided admin password: %w", err))
+		}
+		if cmd.AppConfig.Auth.Simple == nil && cmd.AppConfig.Auth.Basic == nil {
+			// basic and simple auth are unset, enable simple auth for the admin user
+			cmd.AppConfig.Auth.Simple = &authconfig.SimpleAuthConfig{}
+			cmd.AppConfig.Auth.Simple.Users = append(cmd.AppConfig.Auth.Simple.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+		} else if cmd.AppConfig.Auth.Simple != nil {
+			// there already exists a simple auth section, set a simple auth entry for the admin user
+			warnIfUserExists(cmd.AppConfig.Auth.Simple.Users, cmd.AppConfig.AdminUsername, "auth.simple")
+			cmd.AppConfig.Auth.Simple.Users = append(cmd.AppConfig.Auth.Simple.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+		} else {
+			// there already exists a basic auth section, set a basic auth entry for the admin user
+			warnIfUserExists(cmd.AppConfig.Auth.Basic.Users, cmd.AppConfig.AdminUsername, "auth.basic")
+			cmd.AppConfig.Auth.Basic.Users = append(cmd.AppConfig.Auth.Basic.Users, fmt.Sprintf("%s:%s", cmd.AppConfig.AdminUsername, string(pw)))
+		}
+	}
+
+	// A passkey is bound to a host name, and with nothing configured that
+	// name comes from the Host header of whichever request registered it.
+	// Behind a proxy the header is not this server's to decide, so say so
+	// while there is still time to set the name people actually type.
+	if cmd.AppConfig.ExternalHost == "" && cmd.AppConfig.Auth.ConfiguredEntries() > 0 {
+		logrus.Warn("vpn.externalHost is not set: a passkey is then bound to whatever host the registering request carried, and one registered under a different name will not be offered again. Set it to the name people type to reach this server")
+	}
+
+	// we'll generate a private key when using memory://
+	// storage only.
+	if cmd.AppConfig.WireGuard.PrivateKey == "" {
+		if !strings.HasPrefix(cmd.AppConfig.Storage, "memory://") {
+			logrus.Fatal(missingPrivateKey)
+		}
+		key, err := wgtypes.GeneratePrivateKey()
+		if err != nil {
+			logrus.Fatal(fmt.Errorf("failed to generate a server private key: %w", err))
+		}
+		cmd.AppConfig.WireGuard.PrivateKey = key.String()
+	}
+
+	// The empty string can be hard to pass through an env var, so we accept '0' too
+	if cmd.AppConfig.VPN.CIDR == "0" {
+		cmd.AppConfig.VPN.CIDR = ""
+	}
+	if cmd.AppConfig.VPN.CIDRv6 == "0" {
+		cmd.AppConfig.VPN.CIDRv6 = ""
+	}
+	if cmd.AppConfig.DNS.Domain == "0" {
+		cmd.AppConfig.DNS.Domain = ""
+	}
+
+	// kingpin only splits env vars by \n, let's split at commas as well
+	if len(cmd.AppConfig.VPN.AllowedIPs) == 1 {
+		cmd.AppConfig.VPN.AllowedIPs = splitByCommaAndTrim(cmd.AppConfig.VPN.AllowedIPs[0])
+	}
+	if len(cmd.AppConfig.DNS.Upstream) == 1 {
+		cmd.AppConfig.DNS.Upstream = splitByCommaAndTrim(cmd.AppConfig.DNS.Upstream[0])
+	}
+	if len(cmd.AppConfig.ClientConfig.DNSServers) == 1 {
+		cmd.AppConfig.ClientConfig.DNSServers = splitByCommaAndTrim(cmd.AppConfig.ClientConfig.DNSServers[0])
+	}
+
+	return &cmd.AppConfig
+}
+
+// warnIfUserExists reports a user list that already carries an entry for the
+// admin username. The login check stops at the first entry whose username
+// matches, and the admin entry is appended behind the configured ones, so the
+// existing entry decides the password while the admin password set through
+// the environment, a flag or the config file quietly does nothing. The user
+// still gets admin rights - those follow the username, not the entry.
+func warnIfUserExists(users []string, username, section string) {
+	for _, user := range users {
+		if name, _, ok := strings.Cut(user, ":"); ok && name == username {
+			logrus.Warnf("%s already contains a user '%s': that entry decides the password and the configured admin password has no effect - remove one of the two", section, username)
+			return
+		}
+	}
+}
+
+func splitByCommaAndTrim(s string) []string {
+	result := strings.Split(s, ",")
+	for i, addr := range result {
+		result[i] = strings.TrimSpace(addr)
+	}
+	return result
+}
+
+func detectDNSUpstream(ipv4Enabled, ipv6Enabled bool) []string {
+	upstream := resolvconf.Nameservers()
+	if len(upstream) == 0 {
+		logrus.Warn("Failed to get nameservers from /etc/resolv.conf defaulting to Cloudflare DNS instead")
+		// If there's no default route for IPv6, lookup fails immediately without delay and we retry using IPv4
+		if ipv6Enabled {
+			upstream = append(upstream, "2606:4700:4700::1111")
+		}
+		if ipv4Enabled {
+			upstream = append(upstream, "1.1.1.1")
+		}
+	}
+	return upstream
+}
+
+func detectDefaultInterface() string {
+	links, err := netlink.LinkList()
+	if err != nil {
+		logrus.Warn(fmt.Errorf("failed to list network interfaces: %w", err))
+		return ""
+	}
+	return defaultInterfaceName(links, netlink.RouteList)
+}
+
+// defaultInterfaceName returns the name of the first link that carries a
+// default route. routeList is netlink.RouteList in production and a stub in
+// the tests.
+func defaultInterfaceName(links []netlink.Link, routeList func(netlink.Link, int) ([]netlink.Route, error)) string {
+	for _, link := range links {
+		// First try IPv4, then IPv6, hope both have the same default interface
+		for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
+			routes, err := routeList(link, family)
+			if err != nil {
+				// One interface whose routes cannot be read (e.g. it went away
+				// while we were listing) must not hide the default route of
+				// every interface still to come.
+				logrus.Warn(fmt.Errorf("failed to list routes for interface %s: %w", link.Attrs().Name, err))
+				continue
+			}
+			for _, route := range routes {
+				if route.Dst != nil && route.Dst.IP.IsUnspecified() {
+					return link.Attrs().Name
+				}
+			}
+		}
+	}
+	logrus.Warn("could not determine the default network interface name")
+	return ""
+}
+
+var missingPrivateKey = `Missing WireGuard private key:
+
+    create a key:
+
+        $ wg genkey
+
+    configure via environment variable:
+
+        $ export WG_WIREGUARD_PRIVATE_KEY="<private-key>"
+
+    or configure via flag:
+
+        $ wg-access-server serve --wireguard-private-key="<private-key>"
+
+    or configure via file:
+
+      wireguard:
+        privateKey: "<private-key>"
+
+`
+
+// validatePolicies checks the access policies before the server starts: a
+// network that cannot be parsed, or a policy nobody can end up in, is an
+// operator's mistake and it should not take until somebody signs in to show.
+func validatePolicies(policies map[string]config.PolicyConfig, auth *authconfig.AuthConfig) error {
+	for name, policy := range policies {
+		if !network.ValidPolicyName(name) {
+			return fmt.Errorf("the policy name '%s' is not usable: letters, digits and underscores, at most 32 of them - it becomes part of a firewall set name", name)
+		}
+		if len(policy.AllowedIPs) == 0 {
+			return fmt.Errorf("the policy '%s' names no networks - leave people out of every policy to give them vpn.allowedIPs instead", name)
+		}
+		for _, allowed := range policy.AllowedIPs {
+			if _, err := netip.ParsePrefix(allowed); err != nil {
+				return fmt.Errorf("the policy '%s' has an invalid network '%s': %w", name, allowed, err)
+			}
+		}
+	}
+
+	// The rules name the policies, so the two have to agree. A rule for a
+	// policy that does not exist would silently put nobody anywhere.
+	for provider, mapped := range auth.PolicyNames() {
+		for _, name := range mapped {
+			if _, ok := policies[name]; !ok {
+				return fmt.Errorf("%s has a rule for the policy '%s', which is not configured under vpn.policies", provider, name)
+			}
+		}
+	}
+
+	// ... and a policy nothing selects is dead weight, but not a reason to
+	// refuse to start: it may be waiting for a rule that is added next.
+	selected := map[string]bool{}
+	for _, mapped := range auth.PolicyNames() {
+		for _, name := range mapped {
+			selected[name] = true
+		}
+	}
+	for name := range policies {
+		if !selected[name] {
+			logrus.Warnf("The policy '%s' is configured but no policyMapping rule puts anybody in it", name)
+		}
+	}
+
+	return nil
+}

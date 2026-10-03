@@ -1,0 +1,433 @@
+package authconfig
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/casbin/govaluate"
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
+
+	"github.com/freifunkMUC/wg-access-server/internal/authnz/authruntime"
+	"github.com/freifunkMUC/wg-access-server/internal/authnz/authsession"
+	"github.com/freifunkMUC/wg-access-server/internal/authnz/authutil"
+)
+
+const OIDCAuthProvider = "oidc"
+
+// OIDCConfig implements an OIDC client using the [Authorization Code Flow]
+// [Authorization Code Flow]: https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
+type OIDCConfig struct {
+	Name         string                    `yaml:"name"`
+	Issuer       string                    `yaml:"issuer"`
+	ClientID     string                    `yaml:"clientID"`
+	ClientSecret string                    `yaml:"clientSecret"`
+	Scopes       []string                  `yaml:"scopes"`
+	RedirectURL  string                    `yaml:"redirectURL"`
+	EmailDomains []string                  `yaml:"emailDomains"`
+	ClaimMapping map[string]ruleExpression `yaml:"claimMapping"`
+	// PolicyMapping decides which access policies somebody is in: one rule
+	// per policy, over the same claims as ClaimMapping. Every rule that comes
+	// out true puts them in its policy, so they can be in several. The
+	// networks of a policy are configured under vpn.policies.
+	PolicyMapping     map[string]ruleExpression `yaml:"policyMapping"`
+	ClaimsFromIDToken bool                      `yaml:"claimsFromIDToken"`
+	AccessClaim       string                    `yaml:"accessClaim"`
+}
+
+func (c *OIDCConfig) Provider() *authruntime.Provider {
+	// The context for the oidc.Provider must be long-lived for verifying ID tokens later-on
+	ctx := context.Background()
+	provider, err := oidc.NewProvider(ctx, c.Issuer)
+	if err != nil {
+		panic(fmt.Errorf("failed to create OIDC provider: %w", err))
+	}
+	verifier := provider.Verifier(&oidc.Config{ClientID: c.ClientID})
+
+	c.Scopes = ensureScopes(c.Scopes, c.EmailDomains)
+
+	oauthConfig := &oauth2.Config{
+		RedirectURL:  c.RedirectURL,
+		ClientID:     c.ClientID,
+		ClientSecret: c.ClientSecret,
+		Scopes:       c.Scopes,
+		Endpoint:     provider.Endpoint(),
+	}
+
+	redirectURL, err := url.Parse(c.RedirectURL)
+	if err != nil {
+		panic(fmt.Errorf("redirect URL is not valid: %s: %w", c.RedirectURL, err))
+	}
+
+	pkce := supportsPKCE(provider)
+
+	return &authruntime.Provider{
+		Type: OIDCAuthProvider,
+		Name: c.Name,
+		Invoke: func(w http.ResponseWriter, r *http.Request, runtime *authruntime.ProviderRuntime) {
+			c.loginHandler(runtime, oauthConfig, pkce)(w, r)
+		},
+		RegisterRoutes: func(router *mux.Router, runtime *authruntime.ProviderRuntime) error {
+			router.HandleFunc(redirectURL.Path, c.callbackHandler(runtime, oauthConfig, provider, verifier))
+			return nil
+		},
+	}
+}
+
+// supportsPKCE says whether the provider takes a PKCE code challenge. It is
+// only sent to one that says so, so that a provider without PKCE keeps
+// working.
+func supportsPKCE(provider *oidc.Provider) bool {
+	var metadata struct {
+		CodeChallengeMethods []string `json:"code_challenge_methods_supported"`
+	}
+	if err := provider.Claims(&metadata); err != nil {
+		return false
+	}
+	for _, method := range metadata.CodeChallengeMethods {
+		if method == "S256" {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *OIDCConfig) loginHandler(runtime *authruntime.ProviderRuntime, oauthConfig *oauth2.Config, pkce bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 1. Client prepares an Authentication Request containing the desired request parameters.
+		oauthStateString := authutil.RandomString(32)
+		oidcNonce := authutil.RandomString(32)
+		session := &authsession.AuthSession{
+			State: &oauthStateString,
+			Nonce: &oidcNonce,
+		}
+		options := []oauth2.AuthCodeOption{oidc.Nonce(oidcNonce)}
+		// PKCE binds the code to this browser: a code that leaks - into the
+		// logs of a proxy, or the browser history - cannot be redeemed by
+		// anybody else. The nonce does not do that when the claims come from
+		// the UserInfo endpoint, where no ID token is checked.
+		if pkce {
+			verifier := oauth2.GenerateVerifier()
+			session.Verifier = &verifier
+			options = append(options, oauth2.S256ChallengeOption(verifier))
+		}
+		err := runtime.SetSession(w, r, session)
+		if err != nil {
+			http.Error(w, "No session", http.StatusUnauthorized)
+			return
+		}
+		// 2. Client sends the request to the Authorization Server.
+		authCodeURL := oauthConfig.AuthCodeURL(oauthStateString, options...)
+		http.Redirect(w, r, authCodeURL, http.StatusTemporaryRedirect)
+	}
+}
+
+// signInFailed answers a sign-in the identity provider did not complete. What
+// went wrong goes to the log; the browser is not told the details.
+func signInFailed(w http.ResponseWriter, err error) {
+	logrus.Warn(fmt.Errorf("OIDC sign-in failed: %w", err))
+	http.Error(w, "The sign-in with the identity provider failed", http.StatusBadGateway)
+}
+
+func (c *OIDCConfig) callbackHandler(runtime *authruntime.ProviderRuntime, oauthConfig *oauth2.Config,
+	provider *oidc.Provider, verifier *oidc.IDTokenVerifier) http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 3. Authorization Server Authenticates the End-User.
+		// 4. Authorization Server obtains End-User Consent/Authorization.
+		// 5. Authorization Server sends the End-User back to the Client with an Authorization Code.
+
+		s, err := runtime.GetSession(r)
+		if err != nil {
+			http.Error(w, "No session", http.StatusBadRequest)
+			return
+		}
+
+		// Make sure the returned state matches the one saved in the session cookie to prevent CSRF attacks
+		state := r.FormValue("state")
+		if s.State == nil {
+			http.Error(w, "No state associated with session", http.StatusBadRequest)
+			return
+		} else if *s.State != state {
+			http.Error(w, "Bad state value", http.StatusBadRequest)
+			return
+		}
+
+		authCode := r.FormValue("code")
+
+		// 6. Client requests a response using the Authorization Code at the Token Endpoint.
+		// 7. Client receives a response that contains an ID Token and Access Token in the response body.
+		var exchangeOptions []oauth2.AuthCodeOption
+		if s.Verifier != nil {
+			exchangeOptions = append(exchangeOptions, oauth2.VerifierOption(*s.Verifier))
+		}
+		oauth2Token, err := oauthConfig.Exchange(r.Context(), authCode, exchangeOptions...)
+		if err != nil {
+			signInFailed(w, fmt.Errorf("unable to exchange tokens: %w", err))
+			return
+		}
+
+		// 8. Client validates the ID token and retrieves the End-User's Subject Identifier.
+		oidcClaims := make(map[string]interface{})
+		if !c.ClaimsFromIDToken {
+			// Use the UserInfo endpoint to retrieve the claims
+			logrus.Debug("Retrieving claims from UserInfo endpoint")
+			info, err := provider.UserInfo(r.Context(), oauthConfig.TokenSource(r.Context(), oauth2Token))
+			if err != nil {
+				signInFailed(w, fmt.Errorf("unable to get UserInfo: %w", err))
+				return
+			}
+
+			// Dump the claims
+			err = info.Claims(&oidcClaims)
+			if err != nil {
+				signInFailed(w, fmt.Errorf("unable to unmarshal claims from UserInfo JSON: %w", err))
+				return
+			}
+		} else {
+			// Extract and parse the ID token to retrieve the claims
+			logrus.Debug("Retrieving claims from ID Token")
+			rawIDToken, ok := oauth2Token.Extra("id_token").(string)
+			if !ok {
+				signInFailed(w, errors.New("no id_token field in OAuth2 token"))
+				return
+			}
+			// Parse and verify ID Token payload
+			idToken, err := verifier.Verify(r.Context(), rawIDToken)
+			if err != nil {
+				signInFailed(w, fmt.Errorf("failed to verify ID token: %w", err))
+				return
+			}
+
+			// Verify the nonce in the ID token matches the one stored in the session
+			// to prevent replay attacks
+			if s.Nonce == nil {
+				http.Error(w, "No nonce associated with session", http.StatusBadRequest)
+				return
+			} else if idToken.Nonce != *s.Nonce {
+				http.Error(w, "Bad nonce value in ID token", http.StatusBadRequest)
+				return
+			}
+
+			// Dump the claims
+			err = idToken.Claims(&oidcClaims)
+			if err != nil {
+				signInFailed(w, fmt.Errorf("unable to unmarshal claims from ID token JSON: %w", err))
+				return
+			}
+		}
+
+		email, _ := oidcClaims["email"].(string)
+		if len(c.EmailDomains) > 0 {
+			verified, stated := emailVerified(oidcClaims)
+			if stated && !verified {
+				logrus.Warnf("Refusing login of '%s': the identity provider reports the email address as unverified", email)
+				http.Error(w, "Email address is not verified", http.StatusForbidden)
+				return
+			}
+			if !stated {
+				// Worth saying out loud: the domain restriction is then only
+				// as good as whatever the provider does about verification.
+				logrus.Warnf("The identity provider did not state whether the email address of '%s' is verified", email)
+			}
+		}
+		if msg, valid := verifyEmailDomain(c.EmailDomains, email); !valid {
+			http.Error(w, msg, http.StatusForbidden)
+			return
+		}
+
+		claims, err := evaluateClaimMapping(c.ClaimMapping, oidcClaims)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := evaluatePolicyMapping(claims, c.PolicyMapping, oidcClaims); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Build the authnz Identity for the user, they are now considered logged in
+		var subject string
+		if sub, ok := oidcClaims["sub"].(string); ok {
+			subject = sub
+		} else {
+			signInFailed(w, errors.New("no 'sub' claim returned from authorization provider"))
+			return
+		}
+		identity := &authsession.Identity{
+			Provider: c.Name,
+			Subject:  subject,
+			Claims:   *claims,
+		}
+		identity.Name = displayName(oidcClaims)
+		if email != "" {
+			identity.Email = email
+		}
+
+		err = runtime.SetSession(w, r, &authsession.AuthSession{
+			Identity: identity,
+		})
+		if err != nil {
+			sessionNotStarted(w, r, err, "after the OIDC sign-in")
+			return
+		}
+
+		runtime.Done(w, r)
+	}
+}
+
+// nameClaims are the claims somebody's display name is taken from, best
+// first. Not every provider fills 'name': Keycloak only does once a user has
+// a first and a last name, and an installation whose users have neither had
+// the whole UI call them by their subject. The username they know themselves
+// by is a far better label than that.
+var nameClaims = []string{"name", "preferred_username", "nickname", "given_name"}
+
+// displayName returns what to call the person these claims describe, empty
+// when the provider sent nothing to call them by.
+func displayName(claims map[string]interface{}) string {
+	for _, claim := range nameClaims {
+		if name, ok := claims[claim].(string); ok && strings.TrimSpace(name) != "" {
+			return strings.TrimSpace(name)
+		}
+	}
+	return ""
+}
+
+// ensureScopes returns the scopes to request from the provider. Restricting
+// access by email domain needs the email claim, and a provider only sends it
+// when the email scope was asked for - without it every single login would be
+// refused for not having an address.
+func ensureScopes(configured []string, emailDomains []string) []string {
+	scopes := configured
+	if len(scopes) == 0 {
+		// 'profile' comes along by default: without it a provider sends
+		// neither a name nor a username, and everybody ends up listed by
+		// their subject - the opaque identifier their provider issues.
+		scopes = []string{oidc.ScopeOpenID, "profile"}
+	} else if !slices.Contains(scopes, "profile") {
+		logrus.Warn("The configured OIDC scopes do not include 'profile': " +
+			"users and their devices will be listed by their subject, not by their name")
+	}
+	if len(emailDomains) == 0 || slices.Contains(scopes, "email") {
+		return scopes
+	}
+
+	logrus.Warnf("Adding the 'email' scope: emailDomains is configured, which needs the email claim")
+	return append(slices.Clone(scopes), "email")
+}
+
+// emailVerified reports whether the provider marked the address as verified,
+// and whether it said anything about it at all. Providers send either a bool
+// or a string.
+func emailVerified(claims map[string]interface{}) (verified bool, stated bool) {
+	switch value := claims["email_verified"].(type) {
+	case bool:
+		return value, true
+	case string:
+		return strings.EqualFold(value, "true"), true
+	}
+	return false, false
+}
+
+func verifyEmailDomain(allowedDomains []string, email string) (string, bool) {
+	if len(allowedDomains) == 0 {
+		return "", true
+	}
+
+	parsed := strings.Split(email, "@")
+
+	// check we have 2 parts i.e. <user>@<domain>
+	if len(parsed) != 2 {
+		return "Missing or invalid email address", false
+	}
+
+	// match the domain against the list of allowed domains. Domain names are
+	// not case sensitive, and providers do hand out addresses as the user
+	// typed them.
+	for _, domain := range allowedDomains {
+		if strings.EqualFold(domain, parsed[1]) {
+			return "", true
+		}
+	}
+
+	return "Email domain not authorized", false
+}
+
+// evaluateClaimMapping translates OIDC claims to custom authnz claims.
+func evaluateClaimMapping(claimMapping map[string]ruleExpression, oidcClaims map[string]interface{}) (*authsession.Claims, error) {
+	claims := &authsession.Claims{}
+	for claimName, rule := range claimMapping {
+		result, err := rule.Evaluate(oidcClaims)
+		if err != nil {
+			return nil, err
+		}
+
+		// If result is 'false' or an empty string then don't include the Claim
+		if val, ok := result.(bool); ok && val {
+			claims.Add(claimName, strconv.FormatBool(val))
+		} else if val, ok := result.(string); ok && len(val) > 0 {
+			claims.Add(claimName, val)
+		}
+	}
+	return claims, nil
+}
+
+// evaluatePolicyMapping adds a claim for every policy whose rule holds. The
+// names are gone through in order, so the policies of a user do not depend on
+// how Go happened to walk a map.
+func evaluatePolicyMapping(claims *authsession.Claims, policyMapping map[string]ruleExpression, oidcClaims map[string]interface{}) error {
+	names := make([]string, 0, len(policyMapping))
+	for name := range policyMapping {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		result, err := policyMapping[name].Evaluate(oidcClaims)
+		if err != nil {
+			return fmt.Errorf("failed to evaluate the rule of policy '%s': %w", name, err)
+		}
+		// Only a rule that says yes. A policy name is what the configuration
+		// calls it, never something the rule returns - that would let a claim
+		// of the provider name a policy.
+		if applies, ok := result.(bool); ok && applies {
+			claims.Add(authsession.PolicyClaim, name)
+		}
+	}
+	return nil
+}
+
+type ruleExpression struct {
+	*govaluate.EvaluableExpression
+}
+
+// MarshalYAML writes the rule back as the expression it was read from.
+func (r ruleExpression) MarshalYAML() (interface{}, error) {
+	return r.String(), nil
+}
+
+// UnmarshalYAML will decode a RuleExpression/govalidate into yaml string
+func (r *ruleExpression) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var ruleStr string
+	if err := unmarshal(&ruleStr); err != nil {
+		return err
+	}
+	parsedRule, err := govaluate.NewEvaluableExpression(ruleStr)
+	if err != nil {
+		return fmt.Errorf("unable to process OIDC rule: %w", err)
+	}
+	ruleExpression := &ruleExpression{parsedRule}
+	*r = *ruleExpression
+	return nil
+}

@@ -5,6 +5,13 @@
 import * as jspb from 'google-protobuf';
 import * as grpcWeb from 'grpc-web';
 
+// grpc-web >= 2 types a MethodDescriptor's message classes as
+// new (...args: unknown[]) => T, while the classes emitted by protoc-gen-js
+// take an optional jspb.Message.MessageArray. The two are not assignable under
+// strictFunctionTypes, so the constructors are bridged through this alias.
+// It changes types only - the values handed to grpc-web are unchanged.
+type MessageCtor<T> = new (...args: unknown[]) => T;
+
 import * as googleProtobufWrappers from 'google-protobuf/google/protobuf/wrappers_pb';
 import * as googleProtobufDuration from 'google-protobuf/google/protobuf/duration_pb';
 import * as buildinfo from './buildinfo_pb';
@@ -12,14 +19,14 @@ import * as buildinfo from './buildinfo_pb';
 export class Server {
 
 	private client_ = new grpcWeb.GrpcWebClientBase({
-		format: 'text',
+		format: 'binary',
 	});
 
 	private methodInfoInfo = new grpcWeb.MethodDescriptor<InfoReq, InfoRes>(
 		"Info",
-		null,
-		InfoReq,
-		InfoRes,
+		'unary',
+		InfoReq as unknown as MessageCtor<InfoReq>,
+		InfoRes as unknown as MessageCtor<InfoRes>,
 		(req: InfoReq) => req.serializeBinary(),
 		InfoRes.deserializeBinary
 	);
@@ -112,7 +119,6 @@ export declare namespace InfoRes {
 		publicKey: string,
 		host?: googleProtobufWrappers.StringValue.AsObject,
 		port: number,
-		hostVpnIp: string,
 		metadataEnabled: boolean,
 		isAdmin: boolean,
 		allowedIps: string,
@@ -127,6 +133,12 @@ export declare namespace InfoRes {
 		buildInfo?: buildinfo.BuildInfo.AsObject,
 		mtu: number,
 		clientConfigPersistentKeepalive: number,
+		apiTokensEnabled: boolean,
+		subject: string,
+		passwordChangeEnabled: boolean,
+		twoFactorEnabled: boolean,
+		recoveryCodesLeft: number,
+		passkeys: number,
 	}
 }
 
@@ -162,13 +174,6 @@ export class InfoRes extends jspb.Message {
 
 	setPort(value: number): void {
 		(jspb.Message as any).setProto3IntField(this, 3, value);
-	}
-
-	getHostVpnIp(): string {return jspb.Message.getFieldWithDefault(this, 4, "");
-	}
-
-	setHostVpnIp(value: string): void {
-		(jspb.Message as any).setProto3StringField(this, 4, value);
 	}
 
 	getMetadataEnabled(): boolean {return jspb.Message.getFieldWithDefault(this, 5, false);
@@ -271,6 +276,48 @@ export class InfoRes extends jspb.Message {
 		(jspb.Message as any).setProto3IntField(this, 18, value);
 	}
 
+	getApiTokensEnabled(): boolean {return jspb.Message.getFieldWithDefault(this, 19, false);
+	}
+
+	setApiTokensEnabled(value: boolean): void {
+		(jspb.Message as any).setProto3BooleanField(this, 19, value);
+	}
+
+	getSubject(): string {return jspb.Message.getFieldWithDefault(this, 20, "");
+	}
+
+	setSubject(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 20, value);
+	}
+
+	getPasswordChangeEnabled(): boolean {return jspb.Message.getFieldWithDefault(this, 21, false);
+	}
+
+	setPasswordChangeEnabled(value: boolean): void {
+		(jspb.Message as any).setProto3BooleanField(this, 21, value);
+	}
+
+	getTwoFactorEnabled(): boolean {return jspb.Message.getFieldWithDefault(this, 22, false);
+	}
+
+	setTwoFactorEnabled(value: boolean): void {
+		(jspb.Message as any).setProto3BooleanField(this, 22, value);
+	}
+
+	getRecoveryCodesLeft(): number {return jspb.Message.getFieldWithDefault(this, 23, 0);
+	}
+
+	setRecoveryCodesLeft(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 23, value);
+	}
+
+	getPasskeys(): number {return jspb.Message.getFieldWithDefault(this, 24, 0);
+	}
+
+	setPasskeys(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 24, value);
+	}
+
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		InfoRes.serializeBinaryToWriter(this, writer);
@@ -283,7 +330,6 @@ export class InfoRes extends jspb.Message {
 			publicKey: this.getPublicKey(),
 			host: (f = this.getHost()) && f.toObject(),
 			port: this.getPort(),
-			hostVpnIp: this.getHostVpnIp(),
 			metadataEnabled: this.getMetadataEnabled(),
 			isAdmin: this.getIsAdmin(),
 			allowedIps: this.getAllowedIps(),
@@ -298,6 +344,12 @@ export class InfoRes extends jspb.Message {
 			buildInfo: (f = this.getBuildInfo()) && f.toObject(),
 			mtu: this.getMtu(),
 			clientConfigPersistentKeepalive: this.getClientConfigPersistentKeepalive(),
+			apiTokensEnabled: this.getApiTokensEnabled(),
+			subject: this.getSubject(),
+			passwordChangeEnabled: this.getPasswordChangeEnabled(),
+			twoFactorEnabled: this.getTwoFactorEnabled(),
+			recoveryCodesLeft: this.getRecoveryCodesLeft(),
+			passkeys: this.getPasskeys(),
 		};
 	}
 
@@ -313,10 +365,6 @@ export class InfoRes extends jspb.Message {
 		const field3 = message.getPort();
 		if (field3 != 0) {
 			writer.writeInt32(3, field3);
-		}
-		const field4 = message.getHostVpnIp();
-		if (field4.length > 0) {
-			writer.writeString(4, field4);
 		}
 		const field5 = message.getMetadataEnabled();
 		if (field5 != false) {
@@ -374,6 +422,30 @@ export class InfoRes extends jspb.Message {
 		if (field18 != 0) {
 			writer.writeInt32(18, field18);
 		}
+		const field19 = message.getApiTokensEnabled();
+		if (field19 != false) {
+			writer.writeBool(19, field19);
+		}
+		const field20 = message.getSubject();
+		if (field20.length > 0) {
+			writer.writeString(20, field20);
+		}
+		const field21 = message.getPasswordChangeEnabled();
+		if (field21 != false) {
+			writer.writeBool(21, field21);
+		}
+		const field22 = message.getTwoFactorEnabled();
+		if (field22 != false) {
+			writer.writeBool(22, field22);
+		}
+		const field23 = message.getRecoveryCodesLeft();
+		if (field23 != 0) {
+			writer.writeInt32(23, field23);
+		}
+		const field24 = message.getPasskeys();
+		if (field24 != 0) {
+			writer.writeInt32(24, field24);
+		}
 	}
 
 	static deserializeBinary(bytes: Uint8Array): InfoRes {
@@ -401,10 +473,6 @@ export class InfoRes extends jspb.Message {
 			case 3:
 				const field3 = reader.readInt32()
 				message.setPort(field3);
-				break;
-			case 4:
-				const field4 = reader.readString()
-				message.setHostVpnIp(field4);
 				break;
 			case 5:
 				const field5 = reader.readBool()
@@ -464,6 +532,30 @@ export class InfoRes extends jspb.Message {
 				const field18 = reader.readInt32()
 				message.setClientConfigPersistentKeepalive(field18);
 				break;
+			case 19:
+				const field19 = reader.readBool()
+				message.setApiTokensEnabled(field19);
+				break;
+			case 20:
+				const field20 = reader.readString()
+				message.setSubject(field20);
+				break;
+			case 21:
+				const field21 = reader.readBool()
+				message.setPasswordChangeEnabled(field21);
+				break;
+			case 22:
+				const field22 = reader.readBool()
+				message.setTwoFactorEnabled(field22);
+				break;
+			case 23:
+				const field23 = reader.readInt32()
+				message.setRecoveryCodesLeft(field23);
+				break;
+			case 24:
+				const field24 = reader.readInt32()
+				message.setPasskeys(field24);
+				break;
 			default:
 				reader.skipField();
 				break;
@@ -491,7 +583,6 @@ function InfoResFromObject(obj: InfoRes.AsObject | undefined): InfoRes | undefin
 	message.setPublicKey(obj.publicKey);
 	message.setHost(StringValueFromObject(obj.host));
 	message.setPort(obj.port);
-	message.setHostVpnIp(obj.hostVpnIp);
 	message.setMetadataEnabled(obj.metadataEnabled);
 	message.setIsAdmin(obj.isAdmin);
 	message.setAllowedIps(obj.allowedIps);
@@ -506,6 +597,12 @@ function InfoResFromObject(obj: InfoRes.AsObject | undefined): InfoRes | undefin
 	message.setBuildInfo(BuildInfoFromObject(obj.buildInfo));
 	message.setMtu(obj.mtu);
 	message.setClientConfigPersistentKeepalive(obj.clientConfigPersistentKeepalive);
+	message.setApiTokensEnabled(obj.apiTokensEnabled);
+	message.setSubject(obj.subject);
+	message.setPasswordChangeEnabled(obj.passwordChangeEnabled);
+	message.setTwoFactorEnabled(obj.twoFactorEnabled);
+	message.setRecoveryCodesLeft(obj.recoveryCodesLeft);
+	message.setPasskeys(obj.passkeys);
 	return message;
 }
 

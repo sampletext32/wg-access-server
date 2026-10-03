@@ -3,7 +3,7 @@ import { InfoRes } from './sdk/server_pb';
 
 class GlobalAppState {
   info?: InfoRes.AsObject;
-  loadingError?: String;
+  loadingError?: string;
   darkMode: boolean;
 
   constructor() {
@@ -31,9 +31,15 @@ class GlobalAppState {
     });
   }
 
-  setLoadingError(error: String){
+  setLoadingError(error: string){
     runInAction(() => {
       this.loadingError = error;
+    });
+  }
+
+  clearLoadingError(){
+    runInAction(() => {
+      this.loadingError = undefined;
     });
   }
 }
@@ -42,7 +48,7 @@ export const AppState = new GlobalAppState();
 
 console.info('see global app state by typing "window.AppState"');
 
-Object.assign(window as any, {
+Object.assign(window, {
   get AppState() {
     return JSON.parse(JSON.stringify(AppState));
   },

@@ -1,38 +1,58 @@
 package storage
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	gormlogger "gorm.io/gorm/logger"
 )
 
-// GormLogger is a custom logger for Gorm, making it use logrus.
-type GormLogger struct{}
+// migrationFailed explains the failure an operator is most likely to hit:
+// the unique index on public_key cannot be created while the table still
+// holds devices that share one.
+const migrationFailed = `failed to migrate the database schema.
 
-// Print handles log events from Gorm for the custom logger.
-func (*GormLogger) Print(v ...interface{}) {
-	switch v[0] {
-	case "sql":
-		logrus.WithFields(
-			logrus.Fields{
-				"module":  "gorm",
-				"type":    "sql",
-				"rows":    v[5],
-				"src_ref": v[1],
-				"values":  v[4],
-			},
-		).Debug(v[3])
-	case "logrus":
-		logrus.WithFields(logrus.Fields{"module": "gorm", "type": "logrus"}).Print(v[2])
-	}
+If this is about the unique index on public_key, the table holds devices
+sharing a public key. Two devices with the same key cannot both work - the
+WireGuard peer is identified by it - so find them:
+
+    SELECT public_key, COUNT(*) FROM devices GROUP BY public_key HAVING COUNT(*) > 1;
+
+and delete all but one device per key, then start the server again`
+
+// gormLogWriter hands what gorm wants to log to logrus, at debug level: the
+// statements are useful when chasing a problem and noise otherwise.
+type gormLogWriter struct{}
+
+func (gormLogWriter) Printf(format string, args ...interface{}) {
+	logrus.WithField("module", "gorm").Debugf(format, args...)
+}
+
+func newGormLogger() gormlogger.Interface {
+	return gormlogger.New(gormLogWriter{}, gormlogger.Config{
+		SlowThreshold: 200 * time.Millisecond,
+		// Info makes gorm report every statement; the writer above decides
+		// that they are debug output.
+		LogLevel: gormlogger.Info,
+		// a device that does not exist is an answer, not a failure
+		IgnoreRecordNotFoundError: true,
+		// The values are preshared keys, second-factor secrets and password
+		// hashes: the statement is what helps, not what went into it.
+		ParameterizedQueries: true,
+		Colorful:             false,
+	})
 }
 
 // implements Storage interface
@@ -41,9 +61,14 @@ type SQLStorage struct {
 	db               *gorm.DB
 	sqlType          string
 	connectionString string
+	allocationMu     sync.Mutex
 }
 
 func NewSqlStorage(u *url.URL) *SQLStorage {
+	// a copy: the scheme is normalized below, and the caller's URL is theirs
+	copied := *u
+	u = &copied
+
 	var connectionString string
 
 	switch u.Scheme {
@@ -80,24 +105,46 @@ func pgconn(u *url.URL) string {
 		decodedQuery = ""
 	}
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s %s",
-		u.Hostname(),
-		u.Port(),
-		u.User.Username(),
-		password,
-		strings.TrimLeft(u.Path, "/"),
+		pgQuote(u.Hostname()),
+		pgQuote(u.Port()),
+		pgQuote(u.User.Username()),
+		pgQuote(password),
+		pgQuote(strings.TrimLeft(u.Path, "/")),
 		decodedQuery,
 	)
 }
 
+// pgQuote quotes a value of a keyword/value connection string. Unquoted, a
+// space ends the value: a password with one broke the connection string, and
+// the rest of it ended up in the error message.
+func pgQuote(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `'`, `\'`)
+	return "'" + value + "'"
+}
+
 func mysqlconn(u *url.URL) string {
 	password, _ := u.User.Password()
+
+	// The devices table has time columns, and go-sql-driver/mysql only scans
+	// them into time.Time with parseTime=true (default false). Without it every
+	// device read fails, so require it instead of relying on the connection
+	// string to mention it.
+	query := u.Query()
+	if value := query.Get("parseTime"); value != "true" {
+		if value != "" {
+			logrus.Warnf("mysql: overriding parseTime=%s with parseTime=true, which wg-access-server needs to read devices", value)
+		}
+		query.Set("parseTime", "true")
+	}
+
 	return fmt.Sprintf(
 		"%s:%s@tcp(%s)/%s?%s",
 		u.User.Username(),
 		password,
 		u.Host,
 		strings.TrimLeft(u.Path, "/"),
-		u.RawQuery,
+		query.Encode(),
 	)
 }
 
@@ -105,30 +152,82 @@ func sqlite3conn(u *url.URL) string {
 	return filepath.Join(u.Host, u.Path)
 }
 
+// dialector picks the driver for the configured backend.
+func (s *SQLStorage) dialector() (gorm.Dialector, error) {
+	switch s.sqlType {
+	case "postgres":
+		return postgres.Open(s.connectionString), nil
+	case "mysql":
+		return mysql.New(mysql.Config{
+			DSN: s.connectionString,
+			// Without a default size a string column becomes longtext, which
+			// cannot carry the unique index on public_key. varchar(255) is
+			// also what the schema has held since the beginning.
+			DefaultStringSize: 255,
+			// The driver would otherwise migrate every datetime column of
+			// existing installations to datetime(3).
+			DisableDatetimePrecision: true,
+		}), nil
+	case "sqlite3":
+		return sqlite.Open(s.connectionString), nil
+	}
+	return nil, fmt.Errorf("unknown sql storage backend %s", s.sqlType)
+}
+
 func (s *SQLStorage) Open() error {
-	db, err := gorm.Open(s.sqlType, s.connectionString)
+	dialector, err := s.dialector()
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to connect to %s", s.sqlType))
+		return err
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{Logger: newGormLogger()})
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", s.sqlType, err)
 	}
 	s.db = db
 
-	db.SetLogger(&GormLogger{})
-	db.LogMode(true)
+	table, err := deviceTable(db)
+	if err != nil {
+		return err
+	}
 
-	// Migrate the schema
-	s.db.AutoMigrate(&Device{})
+	sqlDB, err := s.sqlDB()
+	if err != nil {
+		return err
+	}
 
+	// Migrating and attaching the Postgres triggers both change the schema,
+	// so replicas starting at the same time take turns. Replacing a trigger
+	// is a DROP and a CREATE: two replicas doing that at once can fail with
+	// "trigger already exists" or deadlock each other.
+	return s.withSchemaLock(func() error {
+		// See migrations.go. The error matters: a failed migration used to
+		// be swallowed here, which is how MySQL ended up without the unique
+		// index on public_key for years.
+		if err := runMigrations(db, migrations); err != nil {
+			return err
+		}
+		return s.attachWatcher(db, sqlDB, table)
+	})
+}
+
+// attachWatcher sets up how this replica learns about device changes.
+func (s *SQLStorage) attachWatcher(db *gorm.DB, sqlDB *sql.DB, table string) error {
 	switch s.sqlType {
 	case "postgres":
-		watcher, err := NewPgWatcher(s.connectionString, db.NewScope(&Device{}).TableName())
+		users, err := userTable(db)
 		if err != nil {
-			return errors.Wrap(err, "failed to create pg watcher")
+			return err
+		}
+		watcher, err := NewPgWatcher(sqlDB, s.connectionString, table, users)
+		if err != nil {
+			return fmt.Errorf("failed to create pg watcher: %w", err)
 		}
 		s.Watcher = watcher
 	case "mysql":
 		fallthrough
 	case "sqlite3":
-		s.Watcher = NewGormWatcher(db, db.NewScope(&Device{}).TableName())
+		s.Watcher = NewGormWatcher(db, table)
 	default:
 		s.Watcher = NewInProcessWatcher()
 	}
@@ -136,20 +235,215 @@ func (s *SQLStorage) Open() error {
 	return nil
 }
 
-func (s *SQLStorage) Close() error {
-	if s.db != nil {
-		return s.db.Close()
+// deviceTable returns the table name gorm uses for a Device.
+func deviceTable(db *gorm.DB) (string, error) {
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(&Device{}); err != nil {
+		return "", fmt.Errorf("failed to determine the devices table name: %w", err)
 	}
-	return nil
+	return stmt.Schema.Table, nil
+}
+
+// userTable returns the table name gorm uses for a User.
+func userTable(db *gorm.DB) (string, error) {
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(&User{}); err != nil {
+		return "", fmt.Errorf("failed to determine the users table name: %w", err)
+	}
+	return stmt.Schema.Table, nil
+}
+
+// sqlDB returns the underlying database handle, for the things gorm does not
+// do itself: pinging and the session-level allocation lock.
+func (s *SQLStorage) sqlDB() (*sql.DB, error) {
+	if s.db == nil {
+		return nil, errors.New("storage is not open")
+	}
+	return s.db.DB()
+}
+
+func (s *SQLStorage) Close() error {
+	if s.db == nil {
+		return nil
+	}
+	db, err := s.sqlDB()
+	if err != nil {
+		return err
+	}
+	return db.Close()
 }
 
 func (s *SQLStorage) Save(device *Device) error {
 	logrus.Debugf("saving device %s", key(device))
-	if err := s.db.Save(&device).Error; err != nil {
-		return errors.Wrapf(err, "failed to write device")
+
+	// Deliberately not gorm's Save: that one falls back to
+	// "INSERT ... ON CONFLICT UPDATE ALL", which on MySQL becomes
+	// "INSERT ... ON DUPLICATE KEY UPDATE" - a statement that does not care
+	// which unique index was violated. A device carrying another device's
+	// public key would then overwrite that other device's row instead of
+	// being refused, which is exactly what the unique index is there to
+	// prevent. Looking first and then inserting or updating keeps a
+	// violation a violation on every backend.
+	var existing int64
+	if err := s.db.Model(&Device{}).
+		Where("owner = ? AND name = ?", device.Owner, device.Name).
+		Count(&existing).Error; err != nil {
+		return fmt.Errorf("failed to look up the device: %w", err)
+	}
+
+	if existing == 0 {
+		if err := s.db.Create(device).Error; err != nil {
+			return fmt.Errorf("failed to write device: %w", err)
+		}
+		s.EmitAdd(device)
+		return nil
+	}
+
+	// Select("*") so that zeroed fields are written too - clearing the
+	// endpoint of a device that went away has to stick.
+	if err := s.db.Model(device).Select("*").Updates(device).Error; err != nil {
+		return fmt.Errorf("failed to write device: %w", err)
 	}
 	s.EmitAdd(device)
 	return nil
+}
+
+func (s *SQLStorage) RecordMetadata(updates []MetadataUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	// One transaction per sync, so a deployment with many peers commits once
+	// instead of once per device.
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("failed to begin metadata transaction: %w", tx.Error)
+	}
+
+	for _, update := range updates {
+		columns := map[string]interface{}{}
+		// Add in the database rather than read-modify-write in Go: concurrent
+		// replicas then cannot lose each other's traffic. COALESCE because
+		// rows written by old versions may hold NULL, and NULL + n is NULL.
+		if update.ReceiveBytes != 0 {
+			columns["receive_bytes"] = gorm.Expr("COALESCE(receive_bytes, 0) + ?", update.ReceiveBytes)
+		}
+		if update.TransmitBytes != 0 {
+			columns["transmit_bytes"] = gorm.Expr("COALESCE(transmit_bytes, 0) + ?", update.TransmitBytes)
+		}
+		if update.Connection != nil {
+			columns["endpoint"] = update.Connection.Endpoint
+			columns["last_handshake_time"] = update.Connection.LastHandshakeTime
+		}
+		if len(columns) == 0 {
+			continue
+		}
+
+		// An explicit UPDATE, never Save: in gorm v1 Save falls back to an
+		// INSERT when nothing matches, which would re-create (and re-add as a
+		// WireGuard peer) a device deleted while this sync was running.
+		// UpdateColumns also skips hooks, so no watcher event fires.
+		q := tx.Model(&Device{}).Where("public_key = ?", update.PublicKey).UpdateColumns(columns)
+		if q.Error != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to record device metadata: %w", q.Error)
+		}
+		if q.RowsAffected == 0 {
+			logrus.Debugf("device with public key %s no longer exists - skipped metadata update", update.PublicKey)
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit device metadata: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLStorage) Rename(device *Device, newName string) (*Device, error) {
+	logrus.Debugf("renaming device %s to %s", key(device), newName)
+
+	// Owner and name together are the primary key, so both identify the row.
+	// An UpdateColumn (no hooks) keeps this out of the gorm watcher, which
+	// expects the value of a create or delete and cannot map a bulk update
+	// back to a device.
+	q := s.db.Model(&Device{}).Where("owner = ? AND name = ?", device.Owner, device.Name).UpdateColumn("name", newName)
+	if q.Error != nil {
+		return nil, fmt.Errorf("failed to rename device: %w", q.Error)
+	}
+	if q.RowsAffected == 0 {
+		return nil, fmt.Errorf("device '%s' of user '%s' no longer exists", device.Name, device.Owner)
+	}
+
+	renamed := *device
+	renamed.Name = newName
+
+	// Postgres learns about this from its own trigger, so that every replica
+	// hears about it; the other backends are single-instance and are told
+	// here (EmitUpdate is a no-op for the pg watcher).
+	s.EmitUpdate(&renamed)
+
+	return &renamed, nil
+}
+
+// SetAccess writes the access columns of one device. Like Rename it goes
+// through UpdateColumns, so the gorm watcher - which cannot map a bulk update
+// back to a device - stays out of it and the event is emitted here.
+func (s *SQLStorage) SetAccess(device *Device, disabled bool, expiresAt *time.Time) (*Device, error) {
+	logrus.Debugf("setting access of device %s: disabled=%t expiresAt=%v", key(device), disabled, expiresAt)
+
+	q := s.db.Model(&Device{}).
+		Where("owner = ? AND name = ?", device.Owner, device.Name).
+		UpdateColumns(map[string]interface{}{"disabled": disabled, "expires_at": expiresAt})
+	if q.Error != nil {
+		return nil, fmt.Errorf("failed to change the access of the device: %w", q.Error)
+	}
+	if q.RowsAffected == 0 {
+		return nil, fmt.Errorf("device '%s' of user '%s' no longer exists", device.Name, device.Owner)
+	}
+
+	changed := *device
+	changed.Disabled = disabled
+	changed.ExpiresAt = expiresAt
+
+	// Postgres learns about this from the update trigger, so that every
+	// replica adds or removes the peer; the other backends are
+	// single-instance and are told here.
+	s.EmitUpdate(&changed)
+
+	return &changed, nil
+}
+
+// SetRoutes writes the routes column of one device, the way SetAccess writes
+// the access ones.
+func (s *SQLStorage) SetRoutes(device *Device, routes string) (*Device, error) {
+	logrus.Debugf("setting routes of device %s: %q", key(device), routes)
+
+	q := s.db.Model(&Device{}).
+		Where("owner = ? AND name = ?", device.Owner, device.Name).
+		UpdateColumn("routes", routes)
+	if q.Error != nil {
+		return nil, fmt.Errorf("failed to change the routes of the device: %w", q.Error)
+	}
+	if q.RowsAffected == 0 {
+		return nil, fmt.Errorf("device '%s' of user '%s' no longer exists", device.Name, device.Owner)
+	}
+
+	changed := *device
+	changed.Routes = routes
+
+	// Postgres hears it from the update trigger; the single-instance backends
+	// are told here.
+	s.EmitUpdate(&changed)
+
+	return &changed, nil
+}
+
+func (s *SQLStorage) Addresses() ([]string, error) {
+	addresses := []string{}
+	if err := s.db.Model(&Device{}).Pluck("address", &addresses).Error; err != nil {
+		return nil, fmt.Errorf("failed to read device addresses from sql: %w", err)
+	}
+	return addresses, nil
 }
 
 func (s *SQLStorage) List(username string) ([]*Device, error) {
@@ -163,7 +457,7 @@ func (s *SQLStorage) List(username string) ([]*Device, error) {
 
 	logrus.Debugf("found %d device(s)", len(devices))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read devices from sql")
+		return nil, fmt.Errorf("failed to read devices from sql: %w", err)
 	}
 	return devices, nil
 }
@@ -171,7 +465,7 @@ func (s *SQLStorage) List(username string) ([]*Device, error) {
 func (s *SQLStorage) Get(owner string, name string) (*Device, error) {
 	device := &Device{}
 	if err := s.db.Where("owner = ? AND name = ?", owner, name).First(&device).Error; err != nil {
-		return nil, errors.Wrapf(err, "failed to read device")
+		return nil, fmt.Errorf("failed to read device: %w", err)
 	}
 	return device, nil
 }
@@ -179,27 +473,210 @@ func (s *SQLStorage) Get(owner string, name string) (*Device, error) {
 func (s *SQLStorage) GetByPublicKey(publicKey string) (*Device, error) {
 	device := &Device{}
 	if err := s.db.Where("public_key = ?", publicKey).First(&device).Error; err != nil {
-		return nil, errors.Wrapf(err, "failed to read device")
+		return nil, fmt.Errorf("failed to read device: %w", err)
 	}
 	return device, nil
 }
 
 func (s *SQLStorage) Delete(device *Device) error {
-	if err := s.db.Delete(&device).Error; err != nil {
-		return errors.Wrap(err, "failed to delete device file")
+	if err := s.db.Delete(device).Error; err != nil {
+		return fmt.Errorf("failed to delete device file: %w", err)
 	}
 	s.EmitDelete(device)
 	return nil
 }
 
+// SetKeys writes the key columns of one device. Like SetAccess it goes through
+// UpdateColumns and emits the event itself; the unique index on the public key
+// is what refuses a key another device already uses.
+func (s *SQLStorage) SetKeys(device *Device, publicKey string, presharedKey string) (*Device, error) {
+	logrus.Debugf("setting the keys of device %s", key(device))
+
+	q := s.db.Model(&Device{}).
+		Where("owner = ? AND name = ?", device.Owner, device.Name).
+		UpdateColumns(map[string]interface{}{"public_key": publicKey, "preshared_key": presharedKey})
+	if q.Error != nil {
+		return nil, fmt.Errorf("failed to change the keys of the device: %w", q.Error)
+	}
+	if q.RowsAffected == 0 {
+		return nil, fmt.Errorf("device '%s' of user '%s' no longer exists", device.Name, device.Owner)
+	}
+
+	changed := *device
+	changed.PublicKey = publicKey
+	changed.PresharedKey = presharedKey
+
+	// Postgres learns about this from the update trigger; the other backends
+	// are told here, and every replica then replaces the peer.
+	s.EmitUpdate(&changed)
+
+	return &changed, nil
+}
+
+// DeleteForOwner removes every device of one user in a single transaction.
+// The events follow the commit: reporting a device as gone and then rolling
+// the delete back would leave the WireGuard peers and the DNS zone describing
+// a state the database never reached.
+func (s *SQLStorage) DeleteForOwner(owner string) ([]*Device, error) {
+	var deleted []*Device
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("owner = ?", owner).Find(&deleted).Error; err != nil {
+			return fmt.Errorf("failed to list the devices of the user: %w", err)
+		}
+
+		// One statement per device, not a bulk delete: the watcher reports
+		// devices, and a bulk delete carries no row to report. Silent,
+		// because these are reported below - after the commit.
+		//
+		// The chain starts at tx every time. Hoisting the Set out of the
+		// loop would reuse one statement, and gorm would keep adding each
+		// device's primary key to the same WHERE until it matches nothing.
+		for _, device := range deleted {
+			if err := tx.Set(silentSetting, true).Delete(device).Error; err != nil {
+				return fmt.Errorf("failed to delete device '%s': %w", device.Name, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, device := range deleted {
+		s.EmitDelete(device)
+	}
+
+	return deleted, nil
+}
+
+// BlockForOwner blocks every device of one user that is not blocked already,
+// in a single transaction. Like DeleteForOwner the events follow the commit,
+// and like SetAccess the update goes through UpdateColumns - the gorm watcher
+// cannot map a bulk update back to a device, so the events are emitted here.
+func (s *SQLStorage) BlockForOwner(owner string) ([]*Device, error) {
+	var blocked []*Device
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("owner = ? AND disabled = ?", owner, false).Find(&blocked).Error; err != nil {
+			return fmt.Errorf("failed to list the devices of the user: %w", err)
+		}
+
+		for _, device := range blocked {
+			q := tx.Model(&Device{}).
+				Where("owner = ? AND name = ?", device.Owner, device.Name).
+				UpdateColumns(map[string]interface{}{"disabled": true})
+			if q.Error != nil {
+				return fmt.Errorf("failed to block device '%s': %w", device.Name, q.Error)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, device := range blocked {
+		device.Disabled = true
+		s.EmitUpdate(device)
+	}
+
+	return blocked, nil
+}
+
+// SaveUser writes what is known about somebody, inserting or replacing in one
+// statement: the subject is the primary key and the only unique thing about
+// the row, so an upsert has no ambiguity to get wrong.
+func (s *SQLStorage) SaveUser(user *User) error {
+	logrus.Debugf("saving user %s", user.Subject)
+
+	// Named columns rather than UpdateAll: a login writes what the identity
+	// provider said, and must not wipe the password the user set for
+	// themselves - which a login does not carry.
+	if err := s.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "subject"}},
+		DoUpdates: clause.AssignmentColumns([]string{"provider", "name", "email", "policies", "last_login"}),
+	}).Create(user).Error; err != nil {
+		return fmt.Errorf("failed to write user: %w", err)
+	}
+	return nil
+}
+
+// SetUserTOTP writes the two-factor columns of one user, and nothing else.
+func (s *SQLStorage) SetUserTOTP(subject string, state TOTPState) error {
+	q := s.db.Model(&User{}).
+		Where("subject = ?", subject).
+		UpdateColumns(map[string]interface{}{
+			"totp_secret":     state.Secret,
+			"totp_enabled_at": state.EnabledAt,
+			"totp_recovery":   state.Recovery,
+			"totp_last_step":  state.LastStep,
+		})
+	if q.Error != nil {
+		return fmt.Errorf("failed to write the second factor of user '%s': %w", subject, q.Error)
+	}
+	if q.RowsAffected == 0 {
+		return fmt.Errorf("user '%s' does not exist", subject)
+	}
+	return nil
+}
+
+// SetUserPassword writes the password columns of one user, and nothing else.
+func (s *SQLStorage) SetUserPassword(subject string, hash string, from string) error {
+	q := s.db.Model(&User{}).
+		Where("subject = ?", subject).
+		UpdateColumns(map[string]interface{}{"password_hash": hash, "password_from": from})
+	if q.Error != nil {
+		return fmt.Errorf("failed to write the password of user '%s': %w", subject, q.Error)
+	}
+	if q.RowsAffected == 0 {
+		return fmt.Errorf("user '%s' does not exist", subject)
+	}
+	return nil
+}
+
+func (s *SQLStorage) GetUser(subject string) (*User, error) {
+	user := &User{}
+	if err := s.db.Where("subject = ?", subject).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to read user: %w", err)
+	}
+	return user, nil
+}
+
+func (s *SQLStorage) Users() ([]*User, error) {
+	users := []*User{}
+	if err := s.db.Find(&users).Error; err != nil {
+		return nil, fmt.Errorf("failed to read users from sql: %w", err)
+	}
+	return users, nil
+}
+
+func (s *SQLStorage) DeleteUser(subject string) error {
+	// the passkeys go with the user: kept, they would be the second factor
+	// of whoever is added under the same name later
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("owner = ?", subject).Delete(&Passkey{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("subject = ?", subject).Delete(&User{}).Error
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	return nil
+}
+
 func (s *SQLStorage) Ping() error {
-	db := s.db.DB()
-	if db == nil {
-		return errors.New("failed to get db")
+	db, err := s.sqlDB()
+	if err != nil {
+		return fmt.Errorf("failed to get db: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return errors.Wrap(err, "failed to ping db")
+		return fmt.Errorf("failed to ping db: %w", err)
 	}
 	return nil
 }

@@ -1,0 +1,468 @@
+package storage
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
+)
+
+// Schema changes are migrations: each one runs once per database, in order,
+// and is recorded in the schema_migrations table.
+//
+// A migration never changes once released - it describes what the schema
+// looked like at the time, so it works on its own copies of the models
+// rather than the ones in use today. To change the schema, append a
+// migration. TestMigrationsMatchTheModels fails if the models and the
+// migrations disagree.
+var migrations = []migration{
+	{
+		// The schema as it was before migrations existed. AutoMigrate, as the
+		// server used to run on every start: it creates the table on a new
+		// database and brings the one of an older version up to date,
+		// including the unique index on public_key that older MySQL
+		// installations lack.
+		id: "0001_devices",
+		apply: func(db *gorm.DB) error {
+			if err := db.AutoMigrate(&deviceV1{}); err != nil {
+				return fmt.Errorf("%s: %w", migrationFailed, err)
+			}
+			return nil
+		},
+	},
+	{
+		id: "0002_api_tokens",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&apiTokenV1{})
+		},
+	},
+	{
+		// Adds the two columns that say whether a device may connect:
+		// disabled and expires_at. Both are empty for every existing device,
+		// which is what "may connect" looks like - an upgrade changes nothing
+		// about the devices that are there.
+		id: "0003_device_access",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&deviceV2{})
+		},
+	},
+	{
+		// Adds the networks that live behind a device. Empty for every
+		// existing device, which is a device that routes nothing - what all
+		// of them did before.
+		id: "0004_device_routes",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&deviceV3{})
+		},
+	},
+	{
+		// The people who signed in. Nothing reads this table before they do
+		// so again, which is why it can start out empty.
+		id: "0005_users",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&userV1{})
+		},
+	},
+	{
+		// The access policies a user is in, as their identity provider said
+		// at their last login. Empty for everybody until they sign in again,
+		// which is a user whose devices reach what vpn.allowedIPs says - what
+		// every device did before.
+		id: "0006_user_policies",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&userV2{})
+		},
+	},
+	{
+		// The browser sessions. Everybody is signed out once by the upgrade:
+		// the identity used to travel in the cookie, and a cookie from before
+		// this names no session.
+		id: "0007_sessions",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&sessionV1{})
+		},
+	},
+	{
+		// A password somebody set for themselves, for the built-in providers.
+		// Empty for everybody after the upgrade, which is what the
+		// configuration said all along.
+		id: "0008_user_password",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&userV3{})
+		},
+	},
+	{
+		// The second factor of the built-in sign-in. Nobody has one after
+		// the upgrade, and nobody is asked for one until they set it up.
+		id: "0009_user_two_factor",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&userV4{})
+		},
+	},
+	{
+		// Passkeys, and the challenge a registration or a sign-in with one
+		// needs between its two halves. Nobody has a passkey after the
+		// upgrade, and nothing asks for one until they register it.
+		id: "0010_passkeys",
+		apply: func(db *gorm.DB) error {
+			if err := db.AutoMigrate(&passkeyV1{}); err != nil {
+				return err
+			}
+			return db.AutoMigrate(&userV5{})
+		},
+	},
+	{
+		// The step a code was last accepted at, so that the same code does
+		// not sign in twice. Zero for everybody after the upgrade, which
+		// accepts the next code and remembers it from then on.
+		id: "0011_totp_last_step",
+		apply: func(db *gorm.DB) error {
+			return db.AutoMigrate(&userV6{})
+		},
+	},
+	{
+		// The session id is a UUID string - 36 characters, not 32. The
+		// column 0007 created was too narrow for the id the server writes,
+		// so Postgres and MySQL refused every session and nobody could sign
+		// in at all. SQLite does not enforce the length and was unaffected.
+		id: "0012_session_id_length",
+		apply: func(db *gorm.DB) error {
+			// AlterColumn rather than AutoMigrate: with the type spelled out
+			// in the tag, AutoMigrate compares "varchar" to "varchar", sees
+			// no difference and leaves the width alone - it ran green here
+			// while the column stayed at 32.
+			//
+			// SQLite is skipped: it never enforced the width, so there is
+			// nothing to widen, and altering a column type there means
+			// rebuilding the table.
+			if db.Name() == "sqlite" {
+				return nil
+			}
+			return db.Migrator().AlterColumn(&sessionV2{}, "ID")
+		},
+	},
+}
+
+type migration struct {
+	id    string
+	apply func(db *gorm.DB) error
+}
+
+// schemaLockName serializes schema changes across the replicas sharing a
+// database, so that two of them starting at once do not both alter the same
+// table. A var so tests can use their own lock.
+var schemaLockName = "wg-access-server/schema"
+
+// schemaLockTimeout is how long a replica waits for another one to finish
+// migrating. Migrating a large table can take a while.
+var schemaLockTimeout = 10 * time.Minute
+
+type schemaMigration struct {
+	ID        string `gorm:"type:varchar(100);primaryKey"`
+	AppliedAt time.Time
+}
+
+func (schemaMigration) TableName() string {
+	return "schema_migrations"
+}
+
+func (s *SQLStorage) withSchemaLock(fn func() error) error {
+	return s.withDatabaseLock(schemaLockName, "schema lock", schemaLockTimeout, fn)
+}
+
+func runMigrations(db *gorm.DB, migrations []migration) error {
+	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
+		return fmt.Errorf("failed to create the schema_migrations table: %w", err)
+	}
+
+	var applied []schemaMigration
+	if err := db.Find(&applied).Error; err != nil {
+		return fmt.Errorf("failed to read the applied migrations: %w", err)
+	}
+
+	known := make(map[string]bool, len(migrations))
+	for _, m := range migrations {
+		known[m.id] = true
+	}
+	done := make(map[string]bool, len(applied))
+	var unknown []string
+	for _, a := range applied {
+		done[a.ID] = true
+		if !known[a.ID] {
+			unknown = append(unknown, a.ID)
+		}
+	}
+
+	// A newer version has changed the schema in ways this one knows nothing
+	// about. Running on it could mean writing rows that no longer fit.
+	if len(unknown) > 0 {
+		return fmt.Errorf("the database was migrated by a newer version of wg-access-server (unknown migrations: %s). "+
+			"Run that version or newer, or restore a backup taken before the upgrade", strings.Join(unknown, ", "))
+	}
+
+	for _, m := range migrations {
+		if done[m.id] {
+			continue
+		}
+		logrus.Infof("Applying database migration %s", m.id)
+		// On MySQL, schema changes commit implicitly, so a failure can leave
+		// a migration half applied there. Each one is written so that running
+		// it again completes it.
+		err := db.Transaction(func(tx *gorm.DB) error {
+			if err := m.apply(tx); err != nil {
+				return err
+			}
+			return tx.Create(&schemaMigration{ID: m.id, AppliedAt: time.Now()}).Error
+		})
+		if err != nil {
+			return fmt.Errorf("database migration %s failed: %w", m.id, err)
+		}
+	}
+
+	return nil
+}
+
+// deviceV1 is the devices table as 0001_devices created it.
+type deviceV1 struct {
+	Owner             string `gorm:"type:varchar(100);primaryKey"`
+	OwnerName         string
+	OwnerEmail        string
+	OwnerProvider     string
+	Name              string `gorm:"type:varchar(100);primaryKey"`
+	PublicKey         string `gorm:"uniqueIndex:uix_devices_public_key"`
+	PresharedKey      string `gorm:"type:varchar(100)"`
+	Address           string
+	CreatedAt         time.Time `gorm:"column:created_at"`
+	LastHandshakeTime *time.Time
+	ReceiveBytes      int64
+	TransmitBytes     int64
+	Endpoint          string
+}
+
+func (deviceV1) TableName() string {
+	return "devices"
+}
+
+// deviceV2 is the devices table as 0003_device_access left it: deviceV1 plus
+// the two access columns.
+type deviceV2 struct {
+	Owner             string `gorm:"type:varchar(100);primaryKey"`
+	OwnerName         string
+	OwnerEmail        string
+	OwnerProvider     string
+	Name              string `gorm:"type:varchar(100);primaryKey"`
+	PublicKey         string `gorm:"uniqueIndex:uix_devices_public_key"`
+	PresharedKey      string `gorm:"type:varchar(100)"`
+	Address           string
+	CreatedAt         time.Time `gorm:"column:created_at"`
+	Disabled          bool
+	ExpiresAt         *time.Time
+	LastHandshakeTime *time.Time
+	ReceiveBytes      int64
+	TransmitBytes     int64
+	Endpoint          string
+}
+
+func (deviceV2) TableName() string {
+	return "devices"
+}
+
+// deviceV3 is the devices table as 0004_device_routes left it: deviceV2 plus
+// the networks behind a device.
+type deviceV3 struct {
+	Owner             string `gorm:"type:varchar(100);primaryKey"`
+	OwnerName         string
+	OwnerEmail        string
+	OwnerProvider     string
+	Name              string `gorm:"type:varchar(100);primaryKey"`
+	PublicKey         string `gorm:"uniqueIndex:uix_devices_public_key"`
+	PresharedKey      string `gorm:"type:varchar(100)"`
+	Address           string
+	CreatedAt         time.Time `gorm:"column:created_at"`
+	Disabled          bool
+	ExpiresAt         *time.Time
+	Routes            string
+	LastHandshakeTime *time.Time
+	ReceiveBytes      int64
+	TransmitBytes     int64
+	Endpoint          string
+}
+
+func (deviceV3) TableName() string {
+	return "devices"
+}
+
+// apiTokenV1 is the api_tokens table as 0002_api_tokens created it.
+type apiTokenV1 struct {
+	ID         string `gorm:"type:varchar(32);primaryKey"`
+	Owner      string `gorm:"type:varchar(100);index:idx_api_tokens_owner"`
+	Name       string `gorm:"type:varchar(100)"`
+	Hash       string `gorm:"type:varchar(64);uniqueIndex:uix_api_tokens_hash"`
+	Identity   string `gorm:"type:text"`
+	CreatedAt  time.Time
+	ExpiresAt  *time.Time
+	LastUsedAt *time.Time
+}
+
+func (apiTokenV1) TableName() string {
+	return "api_tokens"
+}
+
+// userV1 is the users table as 0005_users created it.
+type userV1 struct {
+	Subject   string `gorm:"type:varchar(100);primaryKey"`
+	Provider  string
+	Name      string
+	Email     string
+	LastLogin time.Time
+}
+
+func (userV1) TableName() string {
+	return "users"
+}
+
+// userV2 is the users table as 0006_user_policies left it.
+type userV2 struct {
+	Subject   string `gorm:"type:varchar(100);primaryKey"`
+	Provider  string
+	Name      string
+	Email     string
+	Policies  string
+	LastLogin time.Time
+}
+
+func (userV2) TableName() string {
+	return "users"
+}
+
+// userV3 is the users table as 0008_user_password left it.
+type userV3 struct {
+	Subject      string `gorm:"type:varchar(100);primaryKey"`
+	Provider     string
+	Name         string
+	Email        string
+	Policies     string
+	LastLogin    time.Time
+	PasswordHash string
+	PasswordFrom string
+}
+
+func (userV3) TableName() string {
+	return "users"
+}
+
+// userV4 is the users table as 0009_user_two_factor left it.
+type userV4 struct {
+	Subject       string `gorm:"type:varchar(100);primaryKey"`
+	Provider      string
+	Name          string
+	Email         string
+	Policies      string
+	LastLogin     time.Time
+	PasswordHash  string
+	PasswordFrom  string
+	TotpSecret    string
+	TotpEnabledAt *time.Time
+	TotpRecovery  string
+}
+
+func (userV4) TableName() string {
+	return "users"
+}
+
+// userV5 is the users table as 0010_passkeys left it.
+type userV5 struct {
+	Subject                string `gorm:"type:varchar(100);primaryKey"`
+	Provider               string
+	Name                   string
+	Email                  string
+	Policies               string
+	LastLogin              time.Time
+	PasswordHash           string
+	PasswordFrom           string
+	TotpSecret             string
+	TotpEnabledAt          *time.Time
+	TotpRecovery           string
+	WebauthnChallenge      string
+	WebauthnChallengeUntil *time.Time
+}
+
+func (userV5) TableName() string {
+	return "users"
+}
+
+// userV6 is the users table as 0011_totp_last_step left it.
+type userV6 struct {
+	Subject                string `gorm:"type:varchar(100);primaryKey"`
+	Provider               string
+	Name                   string
+	Email                  string
+	Policies               string
+	LastLogin              time.Time
+	PasswordHash           string
+	PasswordFrom           string
+	TotpSecret             string
+	TotpEnabledAt          *time.Time
+	TotpRecovery           string
+	TotpLastStep           int64
+	WebauthnChallenge      string
+	WebauthnChallengeUntil *time.Time
+}
+
+func (userV6) TableName() string {
+	return "users"
+}
+
+// passkeyV1 is the passkeys table as 0010_passkeys created it.
+type passkeyV1 struct {
+	ID         string `gorm:"type:varchar(255);primaryKey"`
+	Owner      string `gorm:"type:varchar(100);index"`
+	Name       string
+	Data       []byte
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+func (passkeyV1) TableName() string {
+	return "passkeys"
+}
+
+// sessionV1 is the sessions table as 0007_sessions created it.
+type sessionV1 struct {
+	ID         string `gorm:"type:varchar(32);primaryKey"`
+	Owner      string `gorm:"type:varchar(100);index:idx_sessions_owner"`
+	Hash       string `gorm:"type:varchar(64);uniqueIndex:uix_sessions_hash"`
+	Identity   string `gorm:"type:text"`
+	UserAgent  string `gorm:"type:varchar(255)"`
+	RemoteAddr string `gorm:"type:varchar(64)"`
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastSeenAt time.Time
+}
+
+func (sessionV1) TableName() string {
+	return "sessions"
+}
+
+// sessionV2 widens the id to what a UUID string needs. Nothing else changes,
+// and the rows that are there are kept: on SQLite they already hold 36
+// characters, because it never enforced the old limit.
+type sessionV2 struct {
+	// not null is spelled out: without it the generated ALTER would also try
+	// to make the column nullable, which Postgres refuses on a primary key.
+	ID         string `gorm:"type:varchar(36);primaryKey;not null"`
+	Owner      string `gorm:"type:varchar(100);index:idx_sessions_owner"`
+	Hash       string `gorm:"type:varchar(64);uniqueIndex:uix_sessions_hash"`
+	Identity   string `gorm:"type:text"`
+	UserAgent  string `gorm:"type:varchar(255)"`
+	RemoteAddr string `gorm:"type:varchar(64)"`
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastSeenAt time.Time
+}
+
+func (sessionV2) TableName() string {
+	return "sessions"
+}

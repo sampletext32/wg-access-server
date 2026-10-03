@@ -1,0 +1,84 @@
+{{/*gotype: github.com/freifunkMUC/wg-access-server/pkg/authnz/authtemplates.LoginPage*/ -}}
+{{- define "body" -}}
+<style>
+	.banner {
+		padding: 0.75rem;
+		font-size: 0.9rem;
+		margin-bottom: 1rem;
+		border-radius: 8px;
+		text-align: center;
+	}
+
+	.banner.danger {
+		background: #dc3545;
+		color: white;
+	}
+
+	.form hr {
+		position: relative;
+		width: 55%;
+		margin: 1.5rem auto;
+		height: 1px;
+		border: none;
+		background-color: #e0e0e0;
+	}
+
+	.form hr:after {
+		content: "";
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		width: 6px;
+		height: 6px;
+		background-color: #e0e0e0;
+		border-radius: 50%;
+	}
+</style>
+<section class="form">
+	<h2>{{if .Title}}{{.Title}}{{else}}Sign in{{end}}</h2>
+
+	{{if .Banner}}
+		<div class="banner {{.Banner.Intent}}" role="alert">{{.Banner.Text}}</div>
+	{{end}}
+
+	{{/* the providers that sign in elsewhere first, then - set apart - the form */}}
+	{{$form := false}}
+	{{$links := false}}
+	{{range $i, $p := .Providers}}
+		{{if eq $p.Type "basic"}}
+			{{$form = true}}
+		{{else}}
+			{{$links = true}}
+			{{/* a link, not a button inside a link: one element to click and to focus */}}
+			<a class="provider" href="/signin/{{$i}}"
+				style="{{with $p.Branding.Background}}background: {{.}};{{end}} color: {{with $p.Branding.Color}}{{.}}{{else}}white{{end}};">
+				{{with $p.Branding.Icon}}<img src="{{iconURL .}}" alt="">{{end}}
+				<span>{{if eq $p.Type "simple"}}Username and password{{else}}{{$p.Name}}{{end}}</span>
+			</a>
+		{{end}}
+	{{end}}
+
+	{{if and $form $links}}
+		<hr>
+	{{end}}
+
+	{{range $i, $p := .Providers}}
+		{{if eq $p.Type "basic"}}
+			<form method="post" action="/signin/{{$i}}">
+				<div>
+					<label for="username">Username</label>
+					<input id="username" name="username" type="text" autocomplete="username" autofocus required>
+				</div>
+				<div>
+					<label for="password">Password</label>
+					<input id="password" name="password" type="password" autocomplete="current-password" required>
+				</div>
+				<button id="submit" type="submit">Sign in</button>
+			</form>
+		{{end}}
+	{{end}}
+
+	{{template "footer"}}
+</section>
+{{- end}}

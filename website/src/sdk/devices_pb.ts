@@ -5,6 +5,13 @@
 import * as jspb from 'google-protobuf';
 import * as grpcWeb from 'grpc-web';
 
+// grpc-web >= 2 types a MethodDescriptor's message classes as
+// new (...args: unknown[]) => T, while the classes emitted by protoc-gen-js
+// take an optional jspb.Message.MessageArray. The two are not assignable under
+// strictFunctionTypes, so the constructors are bridged through this alias.
+// It changes types only - the values handed to grpc-web are unchanged.
+type MessageCtor<T> = new (...args: unknown[]) => T;
+
 import * as googleProtobufWrappers from 'google-protobuf/google/protobuf/wrappers_pb';
 import * as googleProtobufTimestamp from 'google-protobuf/google/protobuf/timestamp_pb';
 import * as googleProtobufEmpty from 'google-protobuf/google/protobuf/empty_pb';
@@ -12,43 +19,79 @@ import * as googleProtobufEmpty from 'google-protobuf/google/protobuf/empty_pb';
 export class Devices {
 
 	private client_ = new grpcWeb.GrpcWebClientBase({
-		format: 'text',
+		format: 'binary',
 	});
 
 	private methodInfoAddDevice = new grpcWeb.MethodDescriptor<AddDeviceReq, Device>(
 		"AddDevice",
-		null,
-		AddDeviceReq,
-		Device,
+		'unary',
+		AddDeviceReq as unknown as MessageCtor<AddDeviceReq>,
+		Device as unknown as MessageCtor<Device>,
 		(req: AddDeviceReq) => req.serializeBinary(),
 		Device.deserializeBinary
 	);
 
 	private methodInfoListDevices = new grpcWeb.MethodDescriptor<ListDevicesReq, ListDevicesRes>(
 		"ListDevices",
-		null,
-		ListDevicesReq,
-		ListDevicesRes,
+		'unary',
+		ListDevicesReq as unknown as MessageCtor<ListDevicesReq>,
+		ListDevicesRes as unknown as MessageCtor<ListDevicesRes>,
 		(req: ListDevicesReq) => req.serializeBinary(),
 		ListDevicesRes.deserializeBinary
 	);
 
 	private methodInfoDeleteDevice = new grpcWeb.MethodDescriptor<DeleteDeviceReq, googleProtobufEmpty.Empty>(
 		"DeleteDevice",
-		null,
-		DeleteDeviceReq,
-		googleProtobufEmpty.Empty,
+		'unary',
+		DeleteDeviceReq as unknown as MessageCtor<DeleteDeviceReq>,
+		googleProtobufEmpty.Empty as unknown as MessageCtor<googleProtobufEmpty.Empty>,
 		(req: DeleteDeviceReq) => req.serializeBinary(),
 		googleProtobufEmpty.Empty.deserializeBinary
 	);
 
+	private methodInfoRenameDevice = new grpcWeb.MethodDescriptor<RenameDeviceReq, Device>(
+		"RenameDevice",
+		'unary',
+		RenameDeviceReq as unknown as MessageCtor<RenameDeviceReq>,
+		Device as unknown as MessageCtor<Device>,
+		(req: RenameDeviceReq) => req.serializeBinary(),
+		Device.deserializeBinary
+	);
+
+	private methodInfoRotateDeviceKey = new grpcWeb.MethodDescriptor<RotateDeviceKeyReq, Device>(
+		"RotateDeviceKey",
+		'unary',
+		RotateDeviceKeyReq as unknown as MessageCtor<RotateDeviceKeyReq>,
+		Device as unknown as MessageCtor<Device>,
+		(req: RotateDeviceKeyReq) => req.serializeBinary(),
+		Device.deserializeBinary
+	);
+
 	private methodInfoListAllDevices = new grpcWeb.MethodDescriptor<ListAllDevicesReq, ListAllDevicesRes>(
 		"ListAllDevices",
-		null,
-		ListAllDevicesReq,
-		ListAllDevicesRes,
+		'unary',
+		ListAllDevicesReq as unknown as MessageCtor<ListAllDevicesReq>,
+		ListAllDevicesRes as unknown as MessageCtor<ListAllDevicesRes>,
 		(req: ListAllDevicesReq) => req.serializeBinary(),
 		ListAllDevicesRes.deserializeBinary
+	);
+
+	private methodInfoSetDeviceAccess = new grpcWeb.MethodDescriptor<SetDeviceAccessReq, Device>(
+		"SetDeviceAccess",
+		'unary',
+		SetDeviceAccessReq as unknown as MessageCtor<SetDeviceAccessReq>,
+		Device as unknown as MessageCtor<Device>,
+		(req: SetDeviceAccessReq) => req.serializeBinary(),
+		Device.deserializeBinary
+	);
+
+	private methodInfoSetDeviceRoutes = new grpcWeb.MethodDescriptor<SetDeviceRoutesReq, Device>(
+		"SetDeviceRoutes",
+		'unary',
+		SetDeviceRoutesReq as unknown as MessageCtor<SetDeviceRoutesReq>,
+		Device as unknown as MessageCtor<Device>,
+		(req: SetDeviceRoutesReq) => req.serializeBinary(),
+		Device.deserializeBinary
 	);
 
 	constructor(
@@ -113,6 +156,44 @@ export class Devices {
 		});
 	}
 
+	renameDevice(req: RenameDeviceReq.AsObject, metadata?: grpcWeb.Metadata): Promise<Device.AsObject> {
+		return new Promise((resolve, reject) => {
+			const message = RenameDeviceReqFromObject(req);
+			this.client_.rpcCall(
+				this.hostname + '/proto.Devices/RenameDevice',
+				message,
+				Object.assign({}, this.defaultMetadata ? this.defaultMetadata() : {}, metadata),
+				this.methodInfoRenameDevice,
+				(err: grpcWeb.Error, res: Device) => {
+					if (err) {
+						reject(err);
+					} else {
+						resolve(res.toObject());
+					}
+				},
+			);
+		});
+	}
+
+	rotateDeviceKey(req: RotateDeviceKeyReq.AsObject, metadata?: grpcWeb.Metadata): Promise<Device.AsObject> {
+		return new Promise((resolve, reject) => {
+			const message = RotateDeviceKeyReqFromObject(req);
+			this.client_.rpcCall(
+				this.hostname + '/proto.Devices/RotateDeviceKey',
+				message,
+				Object.assign({}, this.defaultMetadata ? this.defaultMetadata() : {}, metadata),
+				this.methodInfoRotateDeviceKey,
+				(err: grpcWeb.Error, res: Device) => {
+					if (err) {
+						reject(err);
+					} else {
+						resolve(res.toObject());
+					}
+				},
+			);
+		});
+	}
+
 	listAllDevices(req: ListAllDevicesReq.AsObject, metadata?: grpcWeb.Metadata): Promise<ListAllDevicesRes.AsObject> {
 		return new Promise((resolve, reject) => {
 			const message = ListAllDevicesReqFromObject(req);
@@ -122,6 +203,44 @@ export class Devices {
 				Object.assign({}, this.defaultMetadata ? this.defaultMetadata() : {}, metadata),
 				this.methodInfoListAllDevices,
 				(err: grpcWeb.Error, res: ListAllDevicesRes) => {
+					if (err) {
+						reject(err);
+					} else {
+						resolve(res.toObject());
+					}
+				},
+			);
+		});
+	}
+
+	setDeviceAccess(req: SetDeviceAccessReq.AsObject, metadata?: grpcWeb.Metadata): Promise<Device.AsObject> {
+		return new Promise((resolve, reject) => {
+			const message = SetDeviceAccessReqFromObject(req);
+			this.client_.rpcCall(
+				this.hostname + '/proto.Devices/SetDeviceAccess',
+				message,
+				Object.assign({}, this.defaultMetadata ? this.defaultMetadata() : {}, metadata),
+				this.methodInfoSetDeviceAccess,
+				(err: grpcWeb.Error, res: Device) => {
+					if (err) {
+						reject(err);
+					} else {
+						resolve(res.toObject());
+					}
+				},
+			);
+		});
+	}
+
+	setDeviceRoutes(req: SetDeviceRoutesReq.AsObject, metadata?: grpcWeb.Metadata): Promise<Device.AsObject> {
+		return new Promise((resolve, reject) => {
+			const message = SetDeviceRoutesReqFromObject(req);
+			this.client_.rpcCall(
+				this.hostname + '/proto.Devices/SetDeviceRoutes',
+				message,
+				Object.assign({}, this.defaultMetadata ? this.defaultMetadata() : {}, metadata),
+				this.methodInfoSetDeviceRoutes,
+				(err: grpcWeb.Error, res: Device) => {
 					if (err) {
 						reject(err);
 					} else {
@@ -153,13 +272,16 @@ export declare namespace Device {
 		ownerEmail: string,
 		ownerProvider: string,
 		presharedKey: string,
+		disabled: boolean,
+		expiresAt?: googleProtobufTimestamp.Timestamp.AsObject,
+		routes: Array<string>,
 	}
 }
 
 export class Device extends jspb.Message {
 
 	private static repeatedFields_ = [
-		
+		17,
 	];
 
 	constructor(data?: jspb.Message.MessageArray) {
@@ -268,6 +390,32 @@ export class Device extends jspb.Message {
 		(jspb.Message as any).setProto3StringField(this, 14, value);
 	}
 
+	getDisabled(): boolean {return jspb.Message.getFieldWithDefault(this, 15, false);
+	}
+
+	setDisabled(value: boolean): void {
+		(jspb.Message as any).setProto3BooleanField(this, 15, value);
+	}
+
+	getExpiresAt(): googleProtobufTimestamp.Timestamp {
+		return jspb.Message.getWrapperField(this, googleProtobufTimestamp.Timestamp, 16);
+	}
+
+	setExpiresAt(value?: googleProtobufTimestamp.Timestamp): void {
+		(jspb.Message as any).setWrapperField(this, 16, value);
+	}
+
+	getRoutes(): Array<string> {return jspb.Message.getFieldWithDefault(this, 17, [""]);
+	}
+
+	setRoutes(value: Array<string>): void {
+		(jspb.Message as any).setProto3StringField(this, 17, value);
+	}
+
+	addRoutes(value: string, index?: number): void {
+		return jspb.Message.addToRepeatedField(this, 17, value, index);
+	}
+
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		Device.serializeBinaryToWriter(this, writer);
@@ -291,6 +439,9 @@ export class Device extends jspb.Message {
 			ownerEmail: this.getOwnerEmail(),
 			ownerProvider: this.getOwnerProvider(),
 			presharedKey: this.getPresharedKey(),
+			disabled: this.getDisabled(),
+			expiresAt: (f = this.getExpiresAt()) && f.toObject(),
+			routes: this.getRoutes(),
 		};
 	}
 
@@ -350,6 +501,18 @@ export class Device extends jspb.Message {
 		const field14 = message.getPresharedKey();
 		if (field14.length > 0) {
 			writer.writeString(14, field14);
+		}
+		const field15 = message.getDisabled();
+		if (field15 != false) {
+			writer.writeBool(15, field15);
+		}
+		const field16 = message.getExpiresAt();
+		if (field16 != null) {
+			writer.writeMessage(16, field16, googleProtobufTimestamp.Timestamp.serializeBinaryToWriter);
+		}
+		const field17 = message.getRoutes();
+		if (field17.length > 0) {
+			writer.writeRepeatedString(17, field17);
 		}
 	}
 
@@ -423,6 +586,19 @@ export class Device extends jspb.Message {
 			case 14:
 				const field14 = reader.readString()
 				message.setPresharedKey(field14);
+				break;
+			case 15:
+				const field15 = reader.readBool()
+				message.setDisabled(field15);
+				break;
+			case 16:
+				const field16 = new googleProtobufTimestamp.Timestamp();
+				reader.readMessage(field16, googleProtobufTimestamp.Timestamp.deserializeBinaryFromReader);
+				message.setExpiresAt(field16);
+				break;
+			case 17:
+				const field17 = reader.readString()
+				message.addRoutes(field17);
 				break;
 			default:
 				reader.skipField();
@@ -579,6 +755,218 @@ export class AddDeviceReq extends jspb.Message {
 			case 6:
 				const field6 = reader.readString()
 				message.setManualIpv6Address(field6);
+				break;
+			default:
+				reader.skipField();
+				break;
+			}
+		}
+		return message;
+	}
+
+}
+export declare namespace RotateDeviceKeyReq {
+	export type AsObject = {
+		name: string,
+		publicKey: string,
+		presharedKey: string,
+	}
+}
+
+export class RotateDeviceKeyReq extends jspb.Message {
+
+	private static repeatedFields_ = [
+		
+	];
+
+	constructor(data?: jspb.Message.MessageArray) {
+		super();
+		jspb.Message.initialize(this, data || [], 0, -1, RotateDeviceKeyReq.repeatedFields_, null);
+	}
+
+
+	getName(): string {return jspb.Message.getFieldWithDefault(this, 1, "");
+	}
+
+	setName(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 1, value);
+	}
+
+	getPublicKey(): string {return jspb.Message.getFieldWithDefault(this, 2, "");
+	}
+
+	setPublicKey(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 2, value);
+	}
+
+	getPresharedKey(): string {return jspb.Message.getFieldWithDefault(this, 3, "");
+	}
+
+	setPresharedKey(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 3, value);
+	}
+
+	serializeBinary(): Uint8Array {
+		const writer = new jspb.BinaryWriter();
+		RotateDeviceKeyReq.serializeBinaryToWriter(this, writer);
+		return writer.getResultBuffer();
+	}
+
+	toObject(): RotateDeviceKeyReq.AsObject {
+		let f: any;
+		return {
+			name: this.getName(),
+			publicKey: this.getPublicKey(),
+			presharedKey: this.getPresharedKey(),
+		};
+	}
+
+	static serializeBinaryToWriter(message: RotateDeviceKeyReq, writer: jspb.BinaryWriter): void {
+		const field1 = message.getName();
+		if (field1.length > 0) {
+			writer.writeString(1, field1);
+		}
+		const field2 = message.getPublicKey();
+		if (field2.length > 0) {
+			writer.writeString(2, field2);
+		}
+		const field3 = message.getPresharedKey();
+		if (field3.length > 0) {
+			writer.writeString(3, field3);
+		}
+	}
+
+	static deserializeBinary(bytes: Uint8Array): RotateDeviceKeyReq {
+		var reader = new jspb.BinaryReader(bytes);
+		var message = new RotateDeviceKeyReq();
+		return RotateDeviceKeyReq.deserializeBinaryFromReader(message, reader);
+	}
+
+	static deserializeBinaryFromReader(message: RotateDeviceKeyReq, reader: jspb.BinaryReader): RotateDeviceKeyReq {
+		while (reader.nextField()) {
+			if (reader.isEndGroup()) {
+				break;
+			}
+			const field = reader.getFieldNumber();
+			switch (field) {
+			case 1:
+				const field1 = reader.readString()
+				message.setName(field1);
+				break;
+			case 2:
+				const field2 = reader.readString()
+				message.setPublicKey(field2);
+				break;
+			case 3:
+				const field3 = reader.readString()
+				message.setPresharedKey(field3);
+				break;
+			default:
+				reader.skipField();
+				break;
+			}
+		}
+		return message;
+	}
+
+}
+export declare namespace RenameDeviceReq {
+	export type AsObject = {
+		name: string,
+		newName: string,
+		owner?: googleProtobufWrappers.StringValue.AsObject,
+	}
+}
+
+export class RenameDeviceReq extends jspb.Message {
+
+	private static repeatedFields_ = [
+		
+	];
+
+	constructor(data?: jspb.Message.MessageArray) {
+		super();
+		jspb.Message.initialize(this, data || [], 0, -1, RenameDeviceReq.repeatedFields_, null);
+	}
+
+
+	getName(): string {return jspb.Message.getFieldWithDefault(this, 1, "");
+	}
+
+	setName(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 1, value);
+	}
+
+	getNewName(): string {return jspb.Message.getFieldWithDefault(this, 2, "");
+	}
+
+	setNewName(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 2, value);
+	}
+
+	getOwner(): googleProtobufWrappers.StringValue {
+		return jspb.Message.getWrapperField(this, googleProtobufWrappers.StringValue, 3);
+	}
+
+	setOwner(value?: googleProtobufWrappers.StringValue): void {
+		(jspb.Message as any).setWrapperField(this, 3, value);
+	}
+
+	serializeBinary(): Uint8Array {
+		const writer = new jspb.BinaryWriter();
+		RenameDeviceReq.serializeBinaryToWriter(this, writer);
+		return writer.getResultBuffer();
+	}
+
+	toObject(): RenameDeviceReq.AsObject {
+		let f: any;
+		return {
+			name: this.getName(),
+			newName: this.getNewName(),
+			owner: (f = this.getOwner()) && f.toObject(),
+		};
+	}
+
+	static serializeBinaryToWriter(message: RenameDeviceReq, writer: jspb.BinaryWriter): void {
+		const field1 = message.getName();
+		if (field1.length > 0) {
+			writer.writeString(1, field1);
+		}
+		const field2 = message.getNewName();
+		if (field2.length > 0) {
+			writer.writeString(2, field2);
+		}
+		const field3 = message.getOwner();
+		if (field3 != null) {
+			writer.writeMessage(3, field3, googleProtobufWrappers.StringValue.serializeBinaryToWriter);
+		}
+	}
+
+	static deserializeBinary(bytes: Uint8Array): RenameDeviceReq {
+		var reader = new jspb.BinaryReader(bytes);
+		var message = new RenameDeviceReq();
+		return RenameDeviceReq.deserializeBinaryFromReader(message, reader);
+	}
+
+	static deserializeBinaryFromReader(message: RenameDeviceReq, reader: jspb.BinaryReader): RenameDeviceReq {
+		while (reader.nextField()) {
+			if (reader.isEndGroup()) {
+				break;
+			}
+			const field = reader.getFieldNumber();
+			switch (field) {
+			case 1:
+				const field1 = reader.readString()
+				message.setName(field1);
+				break;
+			case 2:
+				const field2 = reader.readString()
+				message.setNewName(field2);
+				break;
+			case 3:
+				const field3 = new googleProtobufWrappers.StringValue();
+				reader.readMessage(field3, googleProtobufWrappers.StringValue.deserializeBinaryFromReader);
+				message.setOwner(field3);
 				break;
 			default:
 				reader.skipField();
@@ -941,6 +1329,262 @@ export class ListAllDevicesRes extends jspb.Message {
 	}
 
 }
+export declare namespace SetDeviceRoutesReq {
+	export type AsObject = {
+		name: string,
+		owner?: googleProtobufWrappers.StringValue.AsObject,
+		routes: Array<string>,
+	}
+}
+
+export class SetDeviceRoutesReq extends jspb.Message {
+
+	private static repeatedFields_ = [
+		3,
+	];
+
+	constructor(data?: jspb.Message.MessageArray) {
+		super();
+		jspb.Message.initialize(this, data || [], 0, -1, SetDeviceRoutesReq.repeatedFields_, null);
+	}
+
+
+	getName(): string {return jspb.Message.getFieldWithDefault(this, 1, "");
+	}
+
+	setName(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 1, value);
+	}
+
+	getOwner(): googleProtobufWrappers.StringValue {
+		return jspb.Message.getWrapperField(this, googleProtobufWrappers.StringValue, 2);
+	}
+
+	setOwner(value?: googleProtobufWrappers.StringValue): void {
+		(jspb.Message as any).setWrapperField(this, 2, value);
+	}
+
+	getRoutes(): Array<string> {return jspb.Message.getFieldWithDefault(this, 3, [""]);
+	}
+
+	setRoutes(value: Array<string>): void {
+		(jspb.Message as any).setProto3StringField(this, 3, value);
+	}
+
+	addRoutes(value: string, index?: number): void {
+		return jspb.Message.addToRepeatedField(this, 3, value, index);
+	}
+
+	serializeBinary(): Uint8Array {
+		const writer = new jspb.BinaryWriter();
+		SetDeviceRoutesReq.serializeBinaryToWriter(this, writer);
+		return writer.getResultBuffer();
+	}
+
+	toObject(): SetDeviceRoutesReq.AsObject {
+		let f: any;
+		return {
+			name: this.getName(),
+			owner: (f = this.getOwner()) && f.toObject(),
+			routes: this.getRoutes(),
+		};
+	}
+
+	static serializeBinaryToWriter(message: SetDeviceRoutesReq, writer: jspb.BinaryWriter): void {
+		const field1 = message.getName();
+		if (field1.length > 0) {
+			writer.writeString(1, field1);
+		}
+		const field2 = message.getOwner();
+		if (field2 != null) {
+			writer.writeMessage(2, field2, googleProtobufWrappers.StringValue.serializeBinaryToWriter);
+		}
+		const field3 = message.getRoutes();
+		if (field3.length > 0) {
+			writer.writeRepeatedString(3, field3);
+		}
+	}
+
+	static deserializeBinary(bytes: Uint8Array): SetDeviceRoutesReq {
+		var reader = new jspb.BinaryReader(bytes);
+		var message = new SetDeviceRoutesReq();
+		return SetDeviceRoutesReq.deserializeBinaryFromReader(message, reader);
+	}
+
+	static deserializeBinaryFromReader(message: SetDeviceRoutesReq, reader: jspb.BinaryReader): SetDeviceRoutesReq {
+		while (reader.nextField()) {
+			if (reader.isEndGroup()) {
+				break;
+			}
+			const field = reader.getFieldNumber();
+			switch (field) {
+			case 1:
+				const field1 = reader.readString()
+				message.setName(field1);
+				break;
+			case 2:
+				const field2 = new googleProtobufWrappers.StringValue();
+				reader.readMessage(field2, googleProtobufWrappers.StringValue.deserializeBinaryFromReader);
+				message.setOwner(field2);
+				break;
+			case 3:
+				const field3 = reader.readString()
+				message.addRoutes(field3);
+				break;
+			default:
+				reader.skipField();
+				break;
+			}
+		}
+		return message;
+	}
+
+}
+export declare namespace SetDeviceAccessReq {
+	export type AsObject = {
+		name: string,
+		owner?: googleProtobufWrappers.StringValue.AsObject,
+		disabled?: googleProtobufWrappers.BoolValue.AsObject,
+		expiresAt?: googleProtobufTimestamp.Timestamp.AsObject,
+		clearExpiresAt: boolean,
+	}
+}
+
+export class SetDeviceAccessReq extends jspb.Message {
+
+	private static repeatedFields_ = [
+		
+	];
+
+	constructor(data?: jspb.Message.MessageArray) {
+		super();
+		jspb.Message.initialize(this, data || [], 0, -1, SetDeviceAccessReq.repeatedFields_, null);
+	}
+
+
+	getName(): string {return jspb.Message.getFieldWithDefault(this, 1, "");
+	}
+
+	setName(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 1, value);
+	}
+
+	getOwner(): googleProtobufWrappers.StringValue {
+		return jspb.Message.getWrapperField(this, googleProtobufWrappers.StringValue, 2);
+	}
+
+	setOwner(value?: googleProtobufWrappers.StringValue): void {
+		(jspb.Message as any).setWrapperField(this, 2, value);
+	}
+
+	getDisabled(): googleProtobufWrappers.BoolValue {
+		return jspb.Message.getWrapperField(this, googleProtobufWrappers.BoolValue, 3);
+	}
+
+	setDisabled(value?: googleProtobufWrappers.BoolValue): void {
+		(jspb.Message as any).setWrapperField(this, 3, value);
+	}
+
+	getExpiresAt(): googleProtobufTimestamp.Timestamp {
+		return jspb.Message.getWrapperField(this, googleProtobufTimestamp.Timestamp, 4);
+	}
+
+	setExpiresAt(value?: googleProtobufTimestamp.Timestamp): void {
+		(jspb.Message as any).setWrapperField(this, 4, value);
+	}
+
+	getClearExpiresAt(): boolean {return jspb.Message.getFieldWithDefault(this, 5, false);
+	}
+
+	setClearExpiresAt(value: boolean): void {
+		(jspb.Message as any).setProto3BooleanField(this, 5, value);
+	}
+
+	serializeBinary(): Uint8Array {
+		const writer = new jspb.BinaryWriter();
+		SetDeviceAccessReq.serializeBinaryToWriter(this, writer);
+		return writer.getResultBuffer();
+	}
+
+	toObject(): SetDeviceAccessReq.AsObject {
+		let f: any;
+		return {
+			name: this.getName(),
+			owner: (f = this.getOwner()) && f.toObject(),
+			disabled: (f = this.getDisabled()) && f.toObject(),
+			expiresAt: (f = this.getExpiresAt()) && f.toObject(),
+			clearExpiresAt: this.getClearExpiresAt(),
+		};
+	}
+
+	static serializeBinaryToWriter(message: SetDeviceAccessReq, writer: jspb.BinaryWriter): void {
+		const field1 = message.getName();
+		if (field1.length > 0) {
+			writer.writeString(1, field1);
+		}
+		const field2 = message.getOwner();
+		if (field2 != null) {
+			writer.writeMessage(2, field2, googleProtobufWrappers.StringValue.serializeBinaryToWriter);
+		}
+		const field3 = message.getDisabled();
+		if (field3 != null) {
+			writer.writeMessage(3, field3, googleProtobufWrappers.BoolValue.serializeBinaryToWriter);
+		}
+		const field4 = message.getExpiresAt();
+		if (field4 != null) {
+			writer.writeMessage(4, field4, googleProtobufTimestamp.Timestamp.serializeBinaryToWriter);
+		}
+		const field5 = message.getClearExpiresAt();
+		if (field5 != false) {
+			writer.writeBool(5, field5);
+		}
+	}
+
+	static deserializeBinary(bytes: Uint8Array): SetDeviceAccessReq {
+		var reader = new jspb.BinaryReader(bytes);
+		var message = new SetDeviceAccessReq();
+		return SetDeviceAccessReq.deserializeBinaryFromReader(message, reader);
+	}
+
+	static deserializeBinaryFromReader(message: SetDeviceAccessReq, reader: jspb.BinaryReader): SetDeviceAccessReq {
+		while (reader.nextField()) {
+			if (reader.isEndGroup()) {
+				break;
+			}
+			const field = reader.getFieldNumber();
+			switch (field) {
+			case 1:
+				const field1 = reader.readString()
+				message.setName(field1);
+				break;
+			case 2:
+				const field2 = new googleProtobufWrappers.StringValue();
+				reader.readMessage(field2, googleProtobufWrappers.StringValue.deserializeBinaryFromReader);
+				message.setOwner(field2);
+				break;
+			case 3:
+				const field3 = new googleProtobufWrappers.BoolValue();
+				reader.readMessage(field3, googleProtobufWrappers.BoolValue.deserializeBinaryFromReader);
+				message.setDisabled(field3);
+				break;
+			case 4:
+				const field4 = new googleProtobufTimestamp.Timestamp();
+				reader.readMessage(field4, googleProtobufTimestamp.Timestamp.deserializeBinaryFromReader);
+				message.setExpiresAt(field4);
+				break;
+			case 5:
+				const field5 = reader.readBool()
+				message.setClearExpiresAt(field5);
+				break;
+			default:
+				reader.skipField();
+				break;
+			}
+		}
+		return message;
+	}
+
+}
 
 
 function DeviceFromObject(obj: Device.AsObject | undefined): Device | undefined {
@@ -962,6 +1606,10 @@ function DeviceFromObject(obj: Device.AsObject | undefined): Device | undefined 
 	message.setOwnerEmail(obj.ownerEmail);
 	message.setOwnerProvider(obj.ownerProvider);
 	message.setPresharedKey(obj.presharedKey);
+	message.setDisabled(obj.disabled);
+	message.setExpiresAt(TimestampFromObject(obj.expiresAt));
+	(obj.routes || [])
+		.forEach((item) => message.addRoutes(item));
 	return message;
 }
 
@@ -986,6 +1634,37 @@ function AddDeviceReqFromObject(obj: AddDeviceReq.AsObject | undefined): AddDevi
 	message.setManualIpAssignment(obj.manualIpAssignment);
 	message.setManualIpv4Address(obj.manualIpv4Address);
 	message.setManualIpv6Address(obj.manualIpv6Address);
+	return message;
+}
+
+function RotateDeviceKeyReqFromObject(obj: RotateDeviceKeyReq.AsObject | undefined): RotateDeviceKeyReq | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new RotateDeviceKeyReq();
+	message.setName(obj.name);
+	message.setPublicKey(obj.publicKey);
+	message.setPresharedKey(obj.presharedKey);
+	return message;
+}
+
+function RenameDeviceReqFromObject(obj: RenameDeviceReq.AsObject | undefined): RenameDeviceReq | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new RenameDeviceReq();
+	message.setName(obj.name);
+	message.setNewName(obj.newName);
+	message.setOwner(StringValueFromObject(obj.owner));
+	return message;
+}
+
+function StringValueFromObject(obj: googleProtobufWrappers.StringValue.AsObject | undefined): googleProtobufWrappers.StringValue | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new googleProtobufWrappers.StringValue();
+	message.setValue(obj.value);
 	return message;
 }
 
@@ -1018,15 +1697,6 @@ function DeleteDeviceReqFromObject(obj: DeleteDeviceReq.AsObject | undefined): D
 	return message;
 }
 
-function StringValueFromObject(obj: googleProtobufWrappers.StringValue.AsObject | undefined): googleProtobufWrappers.StringValue | undefined {
-	if (obj === undefined) {
-		return undefined;
-	}
-	const message = new googleProtobufWrappers.StringValue();
-	message.setValue(obj.value);
-	return message;
-}
-
 function ListAllDevicesReqFromObject(obj: ListAllDevicesReq.AsObject | undefined): ListAllDevicesReq | undefined {
 	if (obj === undefined) {
 		return undefined;
@@ -1043,6 +1713,40 @@ function ListAllDevicesResFromObject(obj: ListAllDevicesRes.AsObject | undefined
 	(obj.items || [])
 		.map((item) => DeviceFromObject(item))
 		.forEach((item) => message.addItems(item));
+	return message;
+}
+
+function SetDeviceRoutesReqFromObject(obj: SetDeviceRoutesReq.AsObject | undefined): SetDeviceRoutesReq | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new SetDeviceRoutesReq();
+	message.setName(obj.name);
+	message.setOwner(StringValueFromObject(obj.owner));
+	(obj.routes || [])
+		.forEach((item) => message.addRoutes(item));
+	return message;
+}
+
+function SetDeviceAccessReqFromObject(obj: SetDeviceAccessReq.AsObject | undefined): SetDeviceAccessReq | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new SetDeviceAccessReq();
+	message.setName(obj.name);
+	message.setOwner(StringValueFromObject(obj.owner));
+	message.setDisabled(BoolValueFromObject(obj.disabled));
+	message.setExpiresAt(TimestampFromObject(obj.expiresAt));
+	message.setClearExpiresAt(obj.clearExpiresAt);
+	return message;
+}
+
+function BoolValueFromObject(obj: googleProtobufWrappers.BoolValue.AsObject | undefined): googleProtobufWrappers.BoolValue | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new googleProtobufWrappers.BoolValue();
+	message.setValue(obj.value);
 	return message;
 }
 

@@ -1,6 +1,8 @@
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { Devices } from './sdk/devices_pb';
 import { Server } from './sdk/server_pb';
+import { Sessions } from './sdk/sessions_pb';
+import { Tokens } from './sdk/tokens_pb';
 import { Users } from './sdk/users_pb';
 
 const backend = window.location.origin + '/api';
@@ -9,10 +11,18 @@ export const grpc = {
   server: new Server(backend),
   users: new Users(backend),
   devices: new Devices(backend),
+  sessions: new Sessions(backend),
+  tokens: new Tokens(backend),
 };
 
 // https://github.com/SafetyCulture/grpc-web-devtools
-const devtools = (window as any).__GRPCWEB_DEVTOOLS__;
+declare global {
+  interface Window {
+    __GRPCWEB_DEVTOOLS__?: (clients: unknown[]) => void;
+  }
+}
+
+const devtools = window.__GRPCWEB_DEVTOOLS__;
 if (devtools) {
   devtools(Object.values(grpc));
 }

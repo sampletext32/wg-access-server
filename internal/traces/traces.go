@@ -2,9 +2,9 @@ package traces
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,7 +17,7 @@ const (
 func WithTraceID(ctx context.Context) context.Context {
 	id, err := uuid.NewRandom()
 	if err != nil {
-		logrus.Warn(errors.Wrap(err, "failed to generate trace id"))
+		logrus.Warn(fmt.Errorf("failed to generate trace id: %w", err))
 		return ctx
 	}
 	return context.WithValue(ctx, TraceIDKey, id.String())
@@ -25,14 +25,6 @@ func WithTraceID(ctx context.Context) context.Context {
 
 func Logger(ctx context.Context) *logrus.Entry {
 	return logrus.WithField("trace.id", TraceID(ctx))
-}
-
-// Creates a new instance of the logger which only logs WARNING events.
-// We use it as logger for the GRPC events which are hardcoded as INFO level and pollute the logs.
-func WarnLogger(ctx context.Context) *logrus.Entry {
-	warnLogger := logrus.New()
-	warnLogger.SetLevel(logrus.WarnLevel)
-	return warnLogger.WithField("trace.id", TraceID(ctx))
 }
 
 func TraceID(ctx context.Context) string {

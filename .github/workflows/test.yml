@@ -14,14 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ["1.25"]
+        go: ["1.26"]
     name: Go ${{ matrix.go }} tests
     steps:
       - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go }}
           cache: true # Aktiviert Caching für Go-Module
@@ -34,5 +34,125 @@ jobs:
           restore-keys: |
             go-mod-${{ runner.os }}-${{ matrix.go }}-
 
+      # the end-to-end test for the Connect API drives the real binary
+      - name: Build the server
+        run: go build -o /tmp/wg-access-server .
+
+      # The nftables test loads its ruleset into a network namespace of its
+      # own. Ubuntu keeps unprivileged user namespaces behind AppArmor.
+      - name: Prepare the nftables test
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nftables
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Run tests
         run: go test -v ./...
+        env:
+          WG_BINARY: /tmp/wg-access-server
+          WG_TEST_NFTABLES: "1"
+
+  # Known vulnerabilities in the dependencies and in the standard library this
+  # is built with. It reports only what the code actually reaches, which is why
+  # it can fail the build instead of filling a report nobody reads.
+  govulncheck:
+    runs-on: ubuntu-latest
+    name: Vulnerabilities (Go)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  test-website:
+    runs-on: ubuntu-latest
+    name: Website tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: website
+
+      - name: Run tests
+        run: npm test
+        working-directory: website
+
+  test-databases:
+    runs-on: ubuntu-latest
+    name: Go tests against ${{ matrix.postgres }} and ${{ matrix.mysql }}
+    # The HA paths - the shared allocation lock and the LISTEN/NOTIFY watcher -
+    # only run when a real server is configured. Without this job they are
+    # skipped everywhere and only ever tested by hand.
+    #
+    # Both ends of what the documentation says is supported are tested, plus
+    # MariaDB, which it calls a compatible flavour of MySQL.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - postgres: postgres:13-alpine
+            mysql: mysql:8.0
+          - postgres: postgres:18-alpine
+            mysql: mysql:9
+          - postgres: postgres:17-alpine
+            mysql: mariadb:11.4
+    services:
+      postgres:
+        image: ${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: wgtest
+          POSTGRES_PASSWORD: wgtest
+          POSTGRES_DB: wgtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wgtest -d wgtest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: ${{ matrix.mysql }}
+        env:
+          MYSQL_ROOT_PASSWORD: wgtest
+          MYSQL_DATABASE: wgtest
+          MYSQL_USER: wgtest
+          MYSQL_PASSWORD: wgtest
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mariadb-admin ping -h 127.0.0.1 -uroot -pwgtest || mysqladmin ping -h 127.0.0.1 -uroot -pwgtest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: true
+
+      # -race because what these tests are about is concurrency: several
+      # goroutines and, for the replica test, several processes at once
+      - name: Run tests
+        run: go test -race ./...
+        env:
+          WG_TEST_POSTGRES_URI: postgresql://wgtest:wgtest@localhost:5432/wgtest?sslmode=disable
+          WG_TEST_MYSQL_URI: mysql://root:wgtest@localhost:3306/wgtest

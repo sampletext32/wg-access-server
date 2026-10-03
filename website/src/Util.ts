@@ -1,8 +1,16 @@
 import { formatDistance } from 'date-fns';
 import timestamp_pb from 'google-protobuf/google/protobuf/timestamp_pb';
 import { toDate } from './Api';
-import { fromResource, lazyObservable } from 'mobx-utils';
 import { toast } from './components/Toast';
+
+// Errors reaching the UI are either gRPC-web errors, plain Errors or - in
+// theory - anything a rejected promise carries, so narrow instead of casting.
+export function errorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
+}
 
 export function sleep(seconds: number) {
   return new Promise<void>((resolve) => {
@@ -21,52 +29,45 @@ export function lastSeen(timestamp: timestamp_pb.Timestamp.AsObject | undefined)
   });
 }
 
-export function lazy<T>(cb: () => Promise<T>) {
-  const resource = lazyObservable<T>(async (sink) => {
-    sink(await cb());
-  });
-
-  return {
-    get current() {
-      return resource.current();
-    },
-    refresh: async () => {
-      resource.refresh();
-    },
-  };
+// A device the server has no peer for, or one that is about to lose it. What
+// the UI needs is the same in both places it shows a device, so it is decided
+// here rather than in each of them.
+export interface DeviceAccess {
+  // blocked: the device cannot connect at all - an admin disabled it, or its
+  // expiry date has passed.
+  blocked: boolean;
+  label: string;
 }
 
-export function autorefresh<T>(seconds: number, cb: () => Promise<T>) {
-  let running = false;
-  let sink: ((next: T) => void) | undefined;
+// deviceAccess describes what stands between a device and the VPN. It returns
+// undefined for a device that may connect and keeps it that way, which is the
+// normal case and needs no explaining.
+export function deviceAccess(
+  device: { disabled?: boolean; expiresAt?: timestamp_pb.Timestamp.AsObject },
+  now: Date = new Date(),
+): DeviceAccess | undefined {
+  if (device.disabled) {
+    return { blocked: true, label: 'Blocked' };
+  }
+  if (!device.expiresAt) {
+    return undefined;
+  }
+  const at = toDate(device.expiresAt);
+  if (at <= now) {
+    return { blocked: true, label: 'Expired' };
+  }
+  return { blocked: false, label: 'Expires ' + formatDistance(at, now, { addSuffix: true }) };
+}
 
-  const resource = fromResource<T>(
-    async (s) => {
-      sink = s;
-      running = true;
-      while (running) {
-        sink(await cb());
-        await sleep(seconds);
-      }
-    },
-    () => {
-      running = false;
-    },
-  );
-
-  return {
-    get current() {
-      return resource.current();
-    },
-    refresh: async () => {
-      if (sink) {
-        sink(await cb());
-      }
-    },
-    dispose: () => {
-      resource.dispose();
-    },
-  };
+// accessRank orders devices by how much attention their access needs: the ones
+// that cannot connect last, so that sorting the column descending brings them
+// to the top.
+export function accessRank(device: { disabled?: boolean; expiresAt?: timestamp_pb.Timestamp.AsObject }): number {
+  const access = deviceAccess(device);
+  if (!access) {
+    return 0;
+  }
+  return access.blocked ? 2 : 1;
 }
 
 export function setClipboard(text: string) {

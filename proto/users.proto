@@ -5,16 +5,50 @@ package proto;
 option go_package = "github.com/freifunkMUC/wg-access-server/proto/proto";
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 
 service Users {
   // admin only
   rpc ListUsers(ListUsersReq) returns (ListUsersRes) {}
   rpc DeleteUser (DeleteUserReq) returns (google.protobuf.Empty) {}
+  // Takes somebody's access away without deleting anything: their devices are
+  // blocked, their API tokens revoked and their sessions ended.
+  rpc RevokeAccess(RevokeAccessReq) returns (RevokeAccessRes) {}
+
+  // Changes your own password. Only for the built-in sign-in - with an
+  // identity provider the password is theirs, not ours.
+  rpc ChangePassword(ChangePasswordReq) returns (ChangePasswordRes) {}
+
+  // The second factor of the built-in sign-in: an authenticator app, and the
+  // recovery codes for when the phone is gone. Your own only.
+  rpc StartTwoFactor(StartTwoFactorReq) returns (StartTwoFactorRes) {}
+  rpc ConfirmTwoFactor(ConfirmTwoFactorReq) returns (ConfirmTwoFactorRes) {}
+  rpc DisableTwoFactor(DisableTwoFactorReq) returns (google.protobuf.Empty) {}
+  // Replaces the recovery codes with a fresh set, for whoever has used most
+  // of theirs or cannot find the paper any more.
+  rpc NewRecoveryCodes(NewRecoveryCodesReq) returns (NewRecoveryCodesRes) {}
+  // admin only: take somebody's second factor away when their phone is gone
+  rpc ResetTwoFactor(ResetTwoFactorReq) returns (google.protobuf.Empty) {}
+
+  // Passkeys: the other second factor, a credential the browser holds and
+  // that only this site can ask for. Your own only.
+  rpc ListPasskeys(ListPasskeysReq) returns (ListPasskeysRes) {}
+  rpc BeginPasskey(BeginPasskeyReq) returns (BeginPasskeyRes) {}
+  rpc FinishPasskey(FinishPasskeyReq) returns (Passkey) {}
+  rpc RenamePasskey(RenamePasskeyReq) returns (Passkey) {}
+  rpc DeletePasskey(DeletePasskeyReq) returns (google.protobuf.Empty) {}
 }
 
 message User {
   string name = 1;
   string displayName = 2;
+  // unset: the server has not seen them sign in
+  google.protobuf.Timestamp last_login = 3;
+  // the access policies their identity provider put them in at that login.
+  // Empty: their devices may reach what vpn.allowedIPs says.
+  repeated string policies = 4;
+  // whether they are asked for a second factor when they sign in
+  bool two_factor = 5;
 }
 
 message ListUsersReq {
@@ -27,4 +61,107 @@ message ListUsersRes {
 
 message DeleteUserReq {
   string name = 1;
+}
+
+message ChangePasswordReq {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+// Changing the password signs the other browsers out: whoever knew the old one
+// must not keep a session that was made with it.
+message ChangePasswordRes {
+  int32 sessions_ended = 1;
+}
+
+message StartTwoFactorReq {}
+
+message StartTwoFactorRes {
+  // the shared secret, for whoever cannot scan a QR code
+  string secret = 1;
+  // the otpauth:// URI the QR code holds
+  string uri = 2;
+}
+
+message ConfirmTwoFactorReq {
+  string code = 1;
+}
+
+// The recovery codes, shown once. What the server keeps cannot produce them
+// again.
+message ConfirmTwoFactorRes {
+  repeated string recovery_codes = 1;
+}
+
+message DisableTwoFactorReq {
+  string password = 1;
+}
+
+// The password is asked for the same reason as when turning it off: a browser
+// somebody left signed in must not be able to hand out fresh codes.
+message NewRecoveryCodesReq {
+  string password = 1;
+}
+
+// The new codes, shown once. The old ones stop working the moment these are
+// made.
+message NewRecoveryCodesRes {
+  repeated string recovery_codes = 1;
+}
+
+message ResetTwoFactorReq {
+  string name = 1;
+}
+
+message Passkey {
+  string id = 1;
+  // what the person called it, so they can tell one from another
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+  // unset: it has not been used to sign in yet
+  google.protobuf.Timestamp last_used_at = 4;
+}
+
+message ListPasskeysReq {}
+
+message ListPasskeysRes {
+  repeated Passkey items = 1;
+}
+
+message BeginPasskeyReq {}
+
+// What the browser needs to make a credential, as the JSON the WebAuthn API
+// takes. It is passed through rather than taken apart: it is the browser's
+// business, not this server's.
+message BeginPasskeyRes {
+  string options = 1;
+}
+
+message FinishPasskeyReq {
+  // what the browser made, as JSON
+  string credential = 1;
+  string name = 2;
+}
+
+// Only the name changes. The credential is the authenticator's, and nothing
+// here may touch it.
+message RenamePasskeyReq {
+  string id = 1;
+  string name = 2;
+}
+
+message DeletePasskeyReq {
+  string id = 1;
+}
+
+message RevokeAccessReq {
+  string name = 1;
+}
+
+// What the revocation took away. A user who was already blocked everywhere
+// gives three zeros - it is not an error to revoke twice.
+message RevokeAccessRes {
+  int32 devices_blocked = 1;
+  int32 tokens_deleted = 2;
+  int32 sessions_ended = 3;
 }

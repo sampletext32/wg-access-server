@@ -2,15 +2,23 @@ package storage
 
 import (
 	"errors"
-	"strings"
+	"fmt"
 	"sync"
+	"time"
 )
 
 // implements Storage interface
 type InMemoryStorage struct {
 	*InProcessWatcher
 	mu sync.RWMutex
-	db map[string]*Device
+	// allocationMu is separate from mu because the function run under it
+	// calls List and Save, which take mu themselves.
+	allocationMu sync.Mutex
+	db           map[string]*Device
+	tokens       map[string]*APIToken
+	users        map[string]*User
+	sessions     map[string]*Session
+	passkeys     map[string]*Passkey
 }
 
 func NewMemoryStorage() *InMemoryStorage {
@@ -18,6 +26,10 @@ func NewMemoryStorage() *InMemoryStorage {
 	return &InMemoryStorage{
 		InProcessWatcher: NewInProcessWatcher(),
 		db:               db,
+		tokens:           make(map[string]*APIToken),
+		users:            make(map[string]*User),
+		sessions:         make(map[string]*Session),
+		passkeys:         make(map[string]*Passkey),
 	}
 }
 
@@ -31,10 +43,58 @@ func (s *InMemoryStorage) Close() error {
 
 func (s *InMemoryStorage) Save(device *Device) error {
 	s.mu.Lock()
+	// The SQL backends have a unique index on the public key. Without the
+	// same check here, a second user could register someone else's key and
+	// take over their WireGuard peer - the peer is keyed by it. An empty key
+	// is not a peer identity and only ever turns up in tests.
+	if device.PublicKey != "" {
+		for storedKey, stored := range s.db {
+			if stored.PublicKey == device.PublicKey && storedKey != key(device) {
+				s.mu.Unlock()
+				return errors.New("public key is already in use by another device")
+			}
+		}
+	}
 	s.db[key(device)] = device
 	s.mu.Unlock()
 	s.EmitAdd(device)
 	return nil
+}
+
+func (s *InMemoryStorage) RecordMetadata(updates []MetadataUpdate) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	byPublicKey := make(map[string]*Device, len(s.db))
+	for _, device := range s.db {
+		byPublicKey[device.PublicKey] = device
+	}
+
+	for _, update := range updates {
+		device, ok := byPublicKey[update.PublicKey]
+		if !ok {
+			// the device was deleted in the meantime; don't resurrect it
+			continue
+		}
+		device.ReceiveBytes += update.ReceiveBytes
+		device.TransmitBytes += update.TransmitBytes
+		if update.Connection != nil {
+			handshake := update.Connection.LastHandshakeTime
+			device.Endpoint = update.Connection.Endpoint
+			device.LastHandshakeTime = &handshake
+		}
+	}
+	return nil
+}
+
+func (s *InMemoryStorage) Addresses() ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	addresses := make([]string, 0, len(s.db))
+	for _, device := range s.db {
+		addresses = append(addresses, device.Address)
+	}
+	return addresses, nil
 }
 
 func (s *InMemoryStorage) List(username string) ([]*Device, error) {
@@ -47,14 +107,8 @@ func (s *InMemoryStorage) List(username string) ([]*Device, error) {
 // username is empty). Callers must hold s.mu.
 func (s *InMemoryStorage) list(username string) []*Device {
 	devices := []*Device{}
-	prefix := func() string {
-		if username != "" {
-			return keyStr(username, "")
-		}
-		return ""
-	}()
-	for key, device := range s.db {
-		if strings.HasPrefix(key, prefix) {
+	for _, device := range s.db {
+		if username == "" || device.Owner == username {
 			devices = append(devices, device)
 		}
 	}
@@ -90,6 +144,271 @@ func (s *InMemoryStorage) Delete(device *Device) error {
 	return nil
 }
 
+func (s *InMemoryStorage) Rename(device *Device, newName string) (*Device, error) {
+	renamed, err := s.rename(device, newName)
+	if err != nil {
+		return nil, err
+	}
+
+	// outside the lock, like every other event this storage emits
+	s.EmitUpdate(renamed)
+	return renamed, nil
+}
+
+func (s *InMemoryStorage) rename(device *Device, newName string) (*Device, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stored, ok := s.db[key(device)]
+	if !ok {
+		return nil, errors.New("device doesn't exist")
+	}
+
+	renamed := *stored
+	renamed.Name = newName
+	delete(s.db, key(stored))
+	s.db[key(&renamed)] = &renamed
+	return &renamed, nil
+}
+
+// SetAccess writes the access fields of one device, like Rename writes its
+// name: the stored device is replaced, so a caller holding the old one does
+// not see the change behind its back.
+func (s *InMemoryStorage) SetAccess(device *Device, disabled bool, expiresAt *time.Time) (*Device, error) {
+	changed, err := s.setAccess(device, disabled, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	// outside the lock, like every other event this storage emits
+	s.EmitUpdate(changed)
+	return changed, nil
+}
+
+func (s *InMemoryStorage) setAccess(device *Device, disabled bool, expiresAt *time.Time) (*Device, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stored, ok := s.db[key(device)]
+	if !ok {
+		return nil, errors.New("device doesn't exist")
+	}
+
+	changed := *stored
+	changed.Disabled = disabled
+	changed.ExpiresAt = expiresAt
+	s.db[key(&changed)] = &changed
+	return &changed, nil
+}
+
+// SetRoutes writes the networks behind a device, like SetAccess writes whether
+// it may connect at all.
+func (s *InMemoryStorage) SetRoutes(device *Device, routes string) (*Device, error) {
+	changed, err := s.setRoutes(device, routes)
+	if err != nil {
+		return nil, err
+	}
+
+	// outside the lock, like every other event this storage emits
+	s.EmitUpdate(changed)
+	return changed, nil
+}
+
+func (s *InMemoryStorage) setRoutes(device *Device, routes string) (*Device, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stored, ok := s.db[key(device)]
+	if !ok {
+		return nil, errors.New("device doesn't exist")
+	}
+
+	changed := *stored
+	changed.Routes = routes
+	s.db[key(&changed)] = &changed
+	return &changed, nil
+}
+
+// SetKeys writes the key material of one device, like SetAccess writes whether
+// it may connect. A public key another device already uses is refused here as
+// the unique index refuses it in the SQL backends.
+func (s *InMemoryStorage) SetKeys(device *Device, publicKey string, presharedKey string) (*Device, error) {
+	changed, err := s.setKeys(device, publicKey, presharedKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// outside the lock, like every other event this storage emits
+	s.EmitUpdate(changed)
+	return changed, nil
+}
+
+func (s *InMemoryStorage) setKeys(device *Device, publicKey string, presharedKey string) (*Device, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stored, ok := s.db[key(device)]
+	if !ok {
+		return nil, errors.New("device doesn't exist")
+	}
+
+	for storedKey, other := range s.db {
+		if other.PublicKey == publicKey && storedKey != key(device) {
+			return nil, errors.New("another device already uses this public key")
+		}
+	}
+
+	changed := *stored
+	changed.PublicKey = publicKey
+	changed.PresharedKey = presharedKey
+	s.db[key(&changed)] = &changed
+	return &changed, nil
+}
+
+// DeleteForOwner removes every device of one user. Nothing can fail halfway
+// through a map, so the all-or-nothing promise costs nothing here.
+func (s *InMemoryStorage) DeleteForOwner(owner string) ([]*Device, error) {
+	deleted := s.deleteForOwner(owner)
+	for _, device := range deleted {
+		s.EmitDelete(device)
+	}
+	return deleted, nil
+}
+
+func (s *InMemoryStorage) deleteForOwner(owner string) []*Device {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deleted []*Device
+	for storedKey, device := range s.db {
+		if device.Owner == owner {
+			deleted = append(deleted, device)
+			delete(s.db, storedKey)
+		}
+	}
+	return deleted
+}
+
+// BlockForOwner blocks every device of one user that is not blocked already,
+// the way DeleteForOwner removes them.
+func (s *InMemoryStorage) BlockForOwner(owner string) ([]*Device, error) {
+	blocked := s.blockForOwner(owner)
+	for _, device := range blocked {
+		s.EmitUpdate(device)
+	}
+	return blocked, nil
+}
+
+func (s *InMemoryStorage) blockForOwner(owner string) []*Device {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var blocked []*Device
+	for storedKey, device := range s.db {
+		if device.Owner != owner || device.Disabled {
+			continue
+		}
+		changed := *device
+		changed.Disabled = true
+		s.db[storedKey] = &changed
+		blocked = append(blocked, &changed)
+	}
+	return blocked
+}
+
+func (s *InMemoryStorage) SaveUser(user *User) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stored := *user
+	// a login carries neither a password nor a second factor, and must not
+	// wipe what the user set
+	if previous, ok := s.users[user.Subject]; ok {
+		if stored.PasswordHash == "" {
+			stored.PasswordHash = previous.PasswordHash
+			stored.PasswordFrom = previous.PasswordFrom
+		}
+		if stored.TotpSecret == "" {
+			stored.TotpSecret = previous.TotpSecret
+			stored.TotpEnabledAt = previous.TotpEnabledAt
+			stored.TotpRecovery = previous.TotpRecovery
+		}
+	}
+	s.users[user.Subject] = &stored
+	return nil
+}
+
+func (s *InMemoryStorage) SetUserTOTP(subject string, state TOTPState) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, ok := s.users[subject]
+	if !ok {
+		return fmt.Errorf("user '%s' does not exist", subject)
+	}
+	changed := *user
+	changed.TotpSecret = state.Secret
+	changed.TotpEnabledAt = state.EnabledAt
+	changed.TotpRecovery = state.Recovery
+	changed.TotpLastStep = state.LastStep
+	s.users[subject] = &changed
+	return nil
+}
+
+func (s *InMemoryStorage) SetUserPassword(subject string, hash string, from string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, ok := s.users[subject]
+	if !ok {
+		return fmt.Errorf("user '%s' does not exist", subject)
+	}
+	changed := *user
+	changed.PasswordHash = hash
+	changed.PasswordFrom = from
+	s.users[subject] = &changed
+	return nil
+}
+
+func (s *InMemoryStorage) GetUser(subject string) (*User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	user, ok := s.users[subject]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	return user, nil
+}
+
+func (s *InMemoryStorage) Users() ([]*User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	users := make([]*User, 0, len(s.users))
+	for _, user := range s.users {
+		users = append(users, user)
+	}
+	return users, nil
+}
+
+func (s *InMemoryStorage) DeleteUser(subject string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.users, subject)
+	// the passkeys go with the user: kept, they would be the second factor
+	// of whoever is added under the same name later
+	for id, passkey := range s.passkeys {
+		if passkey.Owner == subject {
+			delete(s.passkeys, id)
+		}
+	}
+	return nil
+}
+
 func (s *InMemoryStorage) Ping() error {
 	return nil
+}
+
+// WithAllocationLock serializes device creation. An in-memory store only ever
+// has one server instance, so a process lock is enough.
+func (s *InMemoryStorage) WithAllocationLock(fn func() error) error {
+	s.allocationMu.Lock()
+	defer s.allocationMu.Unlock()
+	return fn()
 }

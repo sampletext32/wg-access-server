@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Cache Typos
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -31,6 +31,6 @@ jobs:
             typos-${{ runner.os }}-
 
       - name: Run Typos with custom config
-        uses: crate-ci/typos@44e2070e6017f834bf069503acb35ca0ca0b75f2 # v1.47.1
+        uses: crate-ci/typos@d43b6c087ac471e2ea7b8af622ff15f05c0c365b # v1.50.1
         with:
           config: ./.typos.toml

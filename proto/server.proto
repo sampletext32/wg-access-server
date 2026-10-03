@@ -17,10 +17,15 @@ message InfoReq {
 }
 
 message InfoRes {
+  // 4 was host_vpn_ip, the server's own address in the VPN. Nothing ever read
+  // it: the web UI writes dns_address into the client configuration, which
+  // carries both address families.
+  reserved 4;
+  reserved "host_vpn_ip";
+
   string public_key = 1;
   google.protobuf.StringValue host = 2;
   int32 port = 3;
-  string host_vpn_ip = 4;
   bool metadata_enabled = 5;
   bool is_admin = 6;
   string allowed_ips = 7;
@@ -35,4 +40,18 @@ message InfoRes {
   proto.BuildInfo build_info = 16;
   int32 mtu = 17;
   int32 client_config_persistent_keepalive = 18;
+  bool api_tokens_enabled = 19;
+  // who is signed in, as their devices name their owner. The UI tells their
+  // own row from the others with it - an admin must not be offered an action
+  // that would take their own access away mid-click.
+  string subject = 20;
+  // whether this session can change its own password: the built-in sign-in
+  // keeps it here, an identity provider keeps it itself
+  bool password_change_enabled = 21;
+  // whether this session's account is asked for a second factor
+  bool two_factor_enabled = 22;
+  // how many recovery codes it has left, so the UI can say when they run low
+  int32 recovery_codes_left = 23;
+  // how many passkeys this session's account has registered
+  int32 passkeys = 24;
 }

@@ -1,0 +1,263 @@
+package authconfig
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/freifunkMUC/wg-access-server/internal/authnz/authruntime"
+)
+
+type ProviderConfig struct {
+	OIDC   *OIDCConfig       `yaml:"oidc"`
+	Gitlab *GitlabConfig     `yaml:"gitlab"`
+	Github *GithubConfig     `yaml:"github"`
+	Basic  *BasicAuthConfig  `yaml:"basic"`
+	Simple *SimpleAuthConfig `yaml:"simple"`
+}
+
+type AuthConfig struct {
+	SessionStore *SessionStoreConfig `yaml:"sessionStore"`
+	// Embed ProviderConfig for backwards compatibility
+	ProviderConfig `yaml:",inline"`
+	Multiple       map[string]*ProviderConfig `yaml:"multiple"`
+}
+
+type SessionStoreConfig struct {
+	Secret string `yaml:"secret"`
+	// Secure marks the session cookie as Secure, so browsers only send it
+	// over HTTPS. It defaults to false because the web UI is also served
+	// over plain HTTP on `port` (see cmd/serve), which is the documented
+	// setup when TLS is terminated by a reverse proxy in front of
+	// wg-access-server. Turn it on whenever the UI is reachable over
+	// HTTPS only.
+	Secure bool `yaml:"secure"`
+	// MaxAge is how long a session stays valid, as a duration such as "24h".
+	// The claims of a session - including whether the user is an admin and
+	// whether they still have access - are taken from the identity provider
+	// when the session is created and are not re-checked afterwards, so this
+	// is also how long it takes for access revoked at the provider to take
+	// effect. There is no server-side session store to invalidate.
+	// Defaults to 720h (30 days).
+	MaxAge string `yaml:"maxAge"`
+}
+
+func (c *AuthConfig) IsEnabled() bool {
+	return c.OIDC != nil || c.Gitlab != nil || c.Github != nil || c.Basic != nil || c.Simple != nil || len(c.Multiple) > 0
+}
+
+// Validate reports a provider configuration that would not work, before the
+// server starts with it.
+func (c *AuthConfig) Validate() error {
+	if c.Github != nil {
+		if err := c.Github.Validate(); err != nil {
+			return fmt.Errorf("auth.github: %w", err)
+		}
+	}
+	for name, provider := range c.Multiple {
+		if provider.Github != nil {
+			if err := provider.Github.Validate(); err != nil {
+				return fmt.Errorf("auth.multiple.%s.github: %w", name, err)
+			}
+		}
+	}
+
+	// The name is how a user's identity says where it came from: the admin
+	// rule of the built-in sign-in, the OIDC access claim and the second
+	// factor all look it up by name. An identity provider named like the
+	// built-in sign-in, or two sharing a name, would be taken for each other.
+	names := c.identityProviderNames()
+	sorted := make([]string, 0, len(names))
+	for name := range names {
+		sorted = append(sorted, name)
+	}
+	sort.Strings(sorted)
+	for _, name := range sorted {
+		where := names[name]
+		sort.Strings(where)
+		if name == BasicAuthProvider || name == SimpleAuthProvider {
+			return fmt.Errorf("%s: the name %q is taken by the built-in sign-in, give the provider another one", where[0], name)
+		}
+		if len(where) > 1 {
+			return fmt.Errorf("%s share the name %q: their users could not be told apart, give each provider its own", strings.Join(where, " and "), name)
+		}
+	}
+	return nil
+}
+
+// identityProviderNames returns where each identity provider is configured,
+// by the name its users carry - with the defaults Providers() applies.
+func (c *AuthConfig) identityProviderNames() map[string][]string {
+	names := map[string][]string{}
+	add := func(name, where string) {
+		names[name] = append(names[name], where)
+	}
+
+	if c.OIDC != nil {
+		add(c.OIDC.Name, "auth.oidc")
+	}
+	if c.Gitlab != nil {
+		add(c.Gitlab.Name, "auth.gitlab")
+	}
+	if c.Github != nil {
+		add(c.Github.name(), "auth.github")
+	}
+	for key, provider := range c.Multiple {
+		if provider == nil {
+			continue
+		}
+		if provider.OIDC != nil {
+			name := provider.OIDC.Name
+			if name == "" {
+				name = key
+			}
+			add(name, "auth.multiple."+key+".oidc")
+		}
+		if provider.Gitlab != nil {
+			add(provider.Gitlab.Name, "auth.multiple."+key+".gitlab")
+		}
+		if provider.Github != nil {
+			name := provider.Github.Name
+			if name == "" {
+				name = key
+			}
+			add(name, "auth.multiple."+key+".github")
+		}
+	}
+	return names
+}
+
+// PolicyNames returns the access policies the rules of each provider name,
+// so that the configuration can be checked against the policies themselves.
+func (c *AuthConfig) PolicyNames() map[string][]string {
+	names := map[string][]string{}
+	add := func(provider string, config *ProviderConfig) {
+		if config.OIDC == nil {
+			return
+		}
+		for name := range config.OIDC.PolicyMapping {
+			names[provider] = append(names[provider], name)
+		}
+	}
+
+	add("auth.oidc", &c.ProviderConfig)
+	for name, provider := range c.Multiple {
+		add("auth.multiple."+name, provider)
+	}
+	return names
+}
+
+// HasPassword says whether a provider keeps its passwords here. Only the
+// built-in ones do; with an identity provider the password is theirs.
+func HasPassword(provider string) bool {
+	return provider == BasicAuthProvider || provider == SimpleAuthProvider
+}
+
+// ConfiguredEntry returns the htpasswd entry the configuration holds for
+// somebody, across every built-in provider it names, and whether it names them
+// at all. Two providers listing the same username is a configuration nobody
+// should write; the first entry found wins, as it does at sign-in.
+func (c *AuthConfig) ConfiguredEntry(subject string) (string, bool) {
+	lists := [][]string{}
+	add := func(config *ProviderConfig) {
+		if config.Basic != nil {
+			lists = append(lists, config.Basic.Users)
+		}
+		if config.Simple != nil {
+			lists = append(lists, config.Simple.Users)
+		}
+	}
+	add(&c.ProviderConfig)
+	for _, provider := range c.Multiple {
+		add(provider)
+	}
+
+	for _, users := range lists {
+		for _, user := range users {
+			if name, entry, ok := parsehtpassword(user); ok && name == subject {
+				return entry, true
+			}
+		}
+	}
+	return "", false
+}
+
+// ConfiguredEntries is how many users the built-in providers list. None means
+// nobody signs in with a password this server keeps.
+func (c *AuthConfig) ConfiguredEntries() int {
+	count := 0
+	add := func(config *ProviderConfig) {
+		if config.Basic != nil {
+			count += len(config.Basic.Users)
+		}
+		if config.Simple != nil {
+			count += len(config.Simple.Users)
+		}
+	}
+	add(&c.ProviderConfig)
+	for _, provider := range c.Multiple {
+		add(provider)
+	}
+	return count
+}
+
+func (c *AuthConfig) DesiresSignInPage() bool {
+	// Basic auth is the only that truly needs the sign-in button
+	if c.Basic != nil {
+		return true
+	}
+	for _, provider := range c.Multiple {
+		if provider.Basic != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *AuthConfig) Providers() []*authruntime.Provider {
+	providers := []*authruntime.Provider{}
+
+	// backwards compatible auth fields via embedded ProviderConfig
+	if c.OIDC != nil {
+		providers = append(providers, c.OIDC.Provider())
+	}
+	if c.Gitlab != nil {
+		providers = append(providers, c.Gitlab.Provider())
+	}
+	if c.Github != nil {
+		providers = append(providers, c.Github.Provider())
+	}
+	if c.Basic != nil {
+		providers = append(providers, c.Basic.Provider())
+	}
+	if c.Simple != nil {
+		providers = append(providers, c.Simple.Provider())
+	}
+
+	for name, providerConfig := range c.Multiple {
+		if providerConfig.OIDC != nil {
+			// Set the name if not already set
+			if providerConfig.OIDC.Name == "" {
+				providerConfig.OIDC.Name = name
+			}
+			providers = append(providers, providerConfig.OIDC.Provider())
+		}
+		if providerConfig.Gitlab != nil {
+			providers = append(providers, providerConfig.Gitlab.Provider())
+		}
+		if providerConfig.Github != nil {
+			if providerConfig.Github.Name == "" {
+				providerConfig.Github.Name = name
+			}
+			providers = append(providers, providerConfig.Github.Provider())
+		}
+		if providerConfig.Basic != nil {
+			providers = append(providers, providerConfig.Basic.Provider())
+		}
+		if providerConfig.Simple != nil {
+			providers = append(providers, providerConfig.Simple.Provider())
+		}
+	}
+
+	return providers
+}
