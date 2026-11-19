@@ -93,6 +93,9 @@ type AppConfig struct {
 	Filename string `yaml:"filename"`
 	// Configure WireGuard related settings
 	WireGuard WireGuardConfig `yaml:"wireguard"`
+	// Configure AmneziaWG. An empty section means the server speaks plain
+	// WireGuard, which is detectable; see the AmneziaWG documentation.
+	Amnezia AmneziaConfig `yaml:"amnezia"`
 	// Configure VPN related settings (networking)
 	VPN VPNConfig `yaml:"vpn"`
 	// Configure the embedded DNS server

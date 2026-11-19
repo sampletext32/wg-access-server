@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/freifunkMUC/wg-access-server/buildinfo"
@@ -110,6 +110,7 @@ func (s *ServerService) Info(ctx context.Context, _ *connect.Request[proto.InfoR
 		Passkeys:                        passkeyCount(s.Passkeys, user.Subject),
 		UserDisplayName:                 user.Name,
 		UserProvider:                    user.Provider,
+		Amnezia:                         amneziaClientConfig(s.Config.Amnezia),
 	}), nil
 }
 
@@ -139,4 +140,38 @@ func (s *ServerService) allowedIPs() string {
 
 func clientConfigDnsServers(config *config.AppConfig) string {
 	return strings.Join(config.ClientConfig.DNSServers, ", ")
+}
+
+// amneziaClientConfig is the part of the AmneziaWG profile a client needs. It
+// is nil when no profile is configured, in which case a configuration file is
+// a plain WireGuard one. The header protection key is server-side only and
+// never leaves the server this way.
+func amneziaClientConfig(a config.AmneziaConfig) *proto.AmneziaClientConfig {
+	if a.IsZero() {
+		return nil
+	}
+	return &proto.AmneziaClientConfig{
+		Jc:                     a.Client.JC,
+		Jmin:                   a.Client.JMin,
+		Jmax:                   a.Client.JMax,
+		S1:                     a.Shared.S1,
+		S2:                     a.Shared.S2,
+		S3:                     a.Shared.S3,
+		S4:                     a.Shared.S4,
+		H1:                     a.Shared.H1,
+		H2:                     a.Shared.H2,
+		H3:                     a.Shared.H3,
+		H4:                     a.Shared.H4,
+		I1:                     a.Client.I1,
+		I2:                     a.Client.I2,
+		I3:                     a.Client.I3,
+		I4:                     a.Client.I4,
+		I5:                     a.Client.I5,
+		ContentPaddingAddition: a.Client.ContentPaddingAddition,
+		RekeyAfterTime:         a.Client.RekeyAfterTime,
+		RekeyTimeout:           a.Client.RekeyTimeout,
+		RejectAfterTime:        a.Client.RejectAfterTime,
+		KeepaliveTimeout:       a.Client.KeepaliveTimeout,
+		MaxHandshakeAttempts:   a.Client.MaxHandshakeAttempts,
+	}
 }

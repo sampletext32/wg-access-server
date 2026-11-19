@@ -13,7 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/sirupsen/logrus"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 

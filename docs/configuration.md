@@ -74,7 +74,8 @@ Here's what you can configure:
 |                                      |                                     | `wireguard.postUp`             |          |                                              | Shell commands run after the interface is up and the firewall rules are in place. Config file only.                                                                                                                                                                          |
 |                                      |                                     | `wireguard.preDown`            |          |                                              | Shell commands run on shutdown while the interface still exists. Config file only.                                                                                                                                                                                           |
 |                                      |                                     | `wireguard.postDown`           |          |                                              | Shell commands run on shutdown after the interface is gone. Config file only.                                                                                                                                                                                                |
-| `WG_VPN_CIDR`                        | `--vpn-cidr`                        | `vpn.cidr`                     |          | `10.44.0.0/24`                               | The VPN IPv4 network range. VPN clients will be assigned IP addresses in this range. Set to `0` to disable IPv4.                                                                                                                                                              |
+| `WG_AMNEZIA_HEADER_PROTECTION_KEY`  | `--amnezia-header-protection-key`  | `amnezia.server.headerProtectionKey` |          |                                              | The AmneziaWG header protection key (base64). Server-side only; generate it with `awg genkey`. It must stay stable - a new key means every device has to be enrolled again. The rest of the profile is config file only, see [AmneziaWG](#amneziawg). |
+| `WG_AMNEZIA_HEADER_PROTECTION_KEY_FILE` | `--amnezia-header-protection-key-file` |                                  |          |                                              | Read the header protection key from a file, e.g. a Docker secret. Trailing line breaks are removed. Exclusive with the value above. || `WG_VPN_CIDR`                        | `--vpn-cidr`                        | `vpn.cidr`                     |          | `10.44.0.0/24`                               | The VPN IPv4 network range. VPN clients will be assigned IP addresses in this range. Set to `0` to disable IPv4.                                                                                                                                                              |
 | `WG_IPV4_NAT_ENABLED`                | `--vpn-nat44-enabled`               | `vpn.nat44`                    |          | `true`                                       | Disables NAT for IPv4                                                                                                                                                                                                                                                         |
 | `WG_IPV6_NAT_ENABLED`                | `--vpn-nat66-enabled`               | `vpn.nat66`                    |          | `true`                                       | Disables NAT for IPv6                                                                                                                                                                                                                                                         |
 | `WG_VPN_CLIENT_ISOLATION`            | `--vpn-client-isolation`            | `vpn.clientIsolation`          |          | `false`                                      | BLock or allow traffic between client devices (client isolation)                                                                                                                                                                                                              |
@@ -209,6 +210,61 @@ therefore **only be set in the config file**, never through a flag or an environ
 wg-access-server refuses to run them - and refuses to start - unless the config file is writable by
 its owner alone and owned either by root or by the user running the server.
 
+## AmneziaWG
+
+AmneziaWG is a WireGuard fork with traffic obfuscation. Its parameters have to
+agree between the server and every client, so they are one profile that feeds
+both. Without an `amnezia:` section the server speaks plain WireGuard - which
+works, but is easy to detect - and says so at startup.
+
+| Section | Fields | Goes to |
+|---|---|---|
+| `shared` | `s1`-`s4`, `h1`-`h4` | the server's interface **and** every client configuration |
+| `server` | `headerProtectionKey` | the server only |
+| `client` | `jc`, `jmin`, `jmax`, `i1`-`i5`, `contentPaddingAddition`, the timing values | client configurations only |
+
+```yaml
+filename: AmneziaWG
+wireguard:
+  interface: awg0
+  mtu: 1360
+clientConfig:
+  mtu: 1360
+amnezia:
+  server:
+    headerProtectionKey: "<awg genkey output>"
+  shared:
+    s1: 17
+    s2: 29
+    s3: 43
+    s4: 12
+    h1: "123456-123500"
+    h2: "67543-67550"
+    h3: "123123-123200"
+    h4: "32345-32350"
+  client:
+    jc: 4
+    jmin: 500
+    jmax: 1000
+    i1: "<b 0xf6ab3267fa><c><t>"
+    contentPaddingAddition: "10-20"
+```
+
+The profile is validated at startup and the server refuses to run with one that
+cannot work: `jmin` above `jmax`, a header protection key with `s1`-`s4` below
+12 (the header cipher reads a 12-byte nonce), overlapping `h` ranges, a range
+that does not parse, or junk packets as large as the MTU. The header protection
+key is a secret like the private key and must be stable across restarts;
+`amnezia.server.headerProtectionKey`, `WG_AMNEZIA_HEADER_PROTECTION_KEY` and
+the `_FILE` variant are equivalent.
+
+Keep the client MTU below what the network path supports: junk packets up to
+`jmax` are sent *before* the handshake and are not covered by the interface
+MTU, so `jmax` has to be smaller than the path MTU or they get fragmented.
+
+AmneziaWG has no kernel module. The server always uses its embedded userspace
+implementation, so `/dev/net/tun` and `NET_ADMIN` remain all a container needs -
+`SYS_MODULE` and `/lib/modules` are not required.
 ## The Config File (config.yaml)
 
 Here's an example config file to get started with.

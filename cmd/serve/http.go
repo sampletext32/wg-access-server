@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
 	"github.com/gorilla/mux"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/sirupsen/logrus"
 
 	"github.com/freifunkMUC/wg-access-server/internal/api"

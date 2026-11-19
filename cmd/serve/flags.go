@@ -43,6 +43,8 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("wireguard-interface", "Set the wireguard interface name").Default("wg0").Envar("WG_WIREGUARD_INTERFACE").StringVar(&cmd.AppConfig.WireGuard.Interface)
 	cli.Flag("wireguard-private-key", "Wireguard private key").Envar("WG_WIREGUARD_PRIVATE_KEY").StringVar(&cmd.AppConfig.WireGuard.PrivateKey)
 	cli.Flag("wireguard-private-key-file", "Read the Wireguard private key from this file (e.g. a Docker secret); exclusive with --wireguard-private-key").Envar("WG_WIREGUARD_PRIVATE_KEY_FILE").StringVar(&cmd.WireGuardPrivateKeyFile)
+	cli.Flag("amnezia-header-protection-key", "AmneziaWG header protection key (base64)").Envar("WG_AMNEZIA_HEADER_PROTECTION_KEY").StringVar(&cmd.AppConfig.Amnezia.Server.HeaderProtectionKey)
+	cli.Flag("amnezia-header-protection-key-file", "Read the AmneziaWG header protection key from this file (e.g. a Docker secret); exclusive with --amnezia-header-protection-key").Envar("WG_AMNEZIA_HEADER_PROTECTION_KEY_FILE").StringVar(&cmd.AmneziaHeaderKeyFile)
 	cli.Flag("wireguard-port", "The port that the Wireguard server will listen on").Envar("WG_WIREGUARD_PORT").Default("51820").IntVar(&cmd.AppConfig.WireGuard.Port)
 	cli.Flag("wireguard-mtu", "The maximum transmission unit (MTU) to be used on the server-side interface.").Envar("WG_WIREGUARD_MTU").Default("1420").IntVar(&cmd.AppConfig.WireGuard.MTU)
 	cli.Flag("vpn-allowed-ips", "A list of networks that VPN clients will be allowed to connect to via the VPN").Envar("WG_VPN_ALLOWED_IPS").Default("0.0.0.0/0", "::/0").StringsVar(&cmd.AppConfig.VPN.AllowedIPs)
@@ -69,5 +71,8 @@ type servecmd struct {
 	ConfigFilePath          string
 	AdminPasswordFile       string
 	WireGuardPrivateKeyFile string
-	AppConfig               config.AppConfig
+	// AmneziaHeaderKeyFile is the path given through the _FILE variant of the
+	// header protection key; the value itself ends up in the AppConfig.
+	AmneziaHeaderKeyFile string
+	AppConfig            config.AppConfig
 }

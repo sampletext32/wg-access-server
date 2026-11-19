@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/freifunkMUC/wg-access-server/internal/storage"

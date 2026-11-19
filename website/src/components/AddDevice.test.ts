@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { clientConfig } from './AddDevice';
-import { InfoRes } from '../sdk/server_pb';
+import { AmneziaClientConfig, InfoRes } from '../sdk/server_pb';
 
 vi.mock('../Api', () => ({ grpc: {} }));
 
@@ -77,4 +77,64 @@ describe('clientConfig', () => {
   it('falls back to the address the browser is on when the server has no external host', () => {
     expect(config({ host: undefined, port: 0 })).toContain(`Endpoint = ${window.location.hostname}:51820`);
   });
+
+  it('writes the AmneziaWG profile the server hands out', () => {
+    const file = config({ amnezia: amneziaProfile() });
+
+    // shared with the server, so its interface and the client agree
+    expect(file).toContain('S1 = 17');
+    expect(file).toContain('S2 = 29');
+    expect(file).toContain('S3 = 43');
+    expect(file).toContain('S4 = 12');
+    expect(file).toContain('H1 = 123456-123500');
+    expect(file).toContain('H4 = 32345-32350');
+    // client-only
+    expect(file).toContain('Jc = 4');
+    expect(file).toContain('Jmin = 500');
+    expect(file).toContain('Jmax = 1000');
+    expect(file).toContain('I1 = <b 0xf6ab3267fa><c><t>');
+    expect(file).toContain('ContentPaddingAddition = 10-20');
+  });
+
+  it('writes the AmneziaWG lines into the interface section', () => {
+    const file = config({ amnezia: amneziaProfile() });
+    const s1 = file.indexOf('S1 = 17');
+    expect(s1).toBeGreaterThan(0);
+    expect(s1).toBeLessThan(file.indexOf('[Peer]'));
+  });
+
+  it('leaves the AmneziaWG lines out when the server has no profile', () => {
+    const file = config();
+    for (const line of ['Jc =', 'S1 =', 'H1 =', 'I1 =', 'ContentPaddingAddition =']) {
+      expect(file).not.toContain(line);
+    }
+  });
 });
+
+// amneziaProfile is the client half of a profile as the server sends it.
+function amneziaProfile(): AmneziaClientConfig.AsObject {
+  return {
+    jc: 4,
+    jmin: 500,
+    jmax: 1000,
+    s1: 17,
+    s2: 29,
+    s3: 43,
+    s4: 12,
+    h1: '123456-123500',
+    h2: '67543-67550',
+    h3: '123123-123200',
+    h4: '32345-32350',
+    i1: '<b 0xf6ab3267fa><c><t>',
+    i2: '',
+    i3: '',
+    i4: '',
+    i5: '',
+    contentPaddingAddition: '10-20',
+    rekeyAfterTime: '',
+    rekeyTimeout: '',
+    rejectAfterTime: '',
+    keepaliveTimeout: '',
+    maxHandshakeAttempts: '',
+  };
+}

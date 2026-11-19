@@ -142,6 +142,7 @@ export declare namespace InfoRes {
 		apiTokenMaxLifetime?: googleProtobufDuration.Duration.AsObject,
 		userDisplayName: string,
 		userProvider: string,
+		amnezia?: AmneziaClientConfig.AsObject,
 	}
 }
 
@@ -343,6 +344,14 @@ export class InfoRes extends jspb.Message {
 		(jspb.Message as any).setProto3StringField(this, 27, value);
 	}
 
+	getAmnezia(): AmneziaClientConfig {
+		return jspb.Message.getWrapperField(this, AmneziaClientConfig, 28);
+	}
+
+	setAmnezia(value?: AmneziaClientConfig): void {
+		(jspb.Message as any).setWrapperField(this, 28, value);
+	}
+
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		InfoRes.serializeBinaryToWriter(this, writer);
@@ -378,6 +387,7 @@ export class InfoRes extends jspb.Message {
 			apiTokenMaxLifetime: (f = this.getApiTokenMaxLifetime()) && f.toObject(),
 			userDisplayName: this.getUserDisplayName(),
 			userProvider: this.getUserProvider(),
+			amnezia: (f = this.getAmnezia()) && f.toObject(),
 		};
 	}
 
@@ -485,6 +495,10 @@ export class InfoRes extends jspb.Message {
 		const field27 = message.getUserProvider();
 		if (field27.length > 0) {
 			writer.writeString(27, field27);
+		}
+		const field28 = message.getAmnezia();
+		if (field28 != null) {
+			writer.writeMessage(28, field28, AmneziaClientConfig.serializeBinaryToWriter);
 		}
 	}
 
@@ -609,6 +623,439 @@ export class InfoRes extends jspb.Message {
 				const field27 = reader.readString()
 				message.setUserProvider(field27);
 				break;
+			case 28:
+				const field28 = new AmneziaClientConfig();
+				reader.readMessage(field28, AmneziaClientConfig.deserializeBinaryFromReader);
+				message.setAmnezia(field28);
+				break;
+			default:
+				reader.skipField();
+				break;
+			}
+		}
+		return message;
+	}
+
+}
+export declare namespace AmneziaClientConfig {
+	export type AsObject = {
+		jc: number,
+		jmin: number,
+		jmax: number,
+		s1: number,
+		s2: number,
+		s3: number,
+		s4: number,
+		h1: string,
+		h2: string,
+		h3: string,
+		h4: string,
+		i1: string,
+		i2: string,
+		i3: string,
+		i4: string,
+		i5: string,
+		contentPaddingAddition: string,
+		rekeyAfterTime: string,
+		rekeyTimeout: string,
+		rejectAfterTime: string,
+		keepaliveTimeout: string,
+		maxHandshakeAttempts: string,
+	}
+}
+
+export class AmneziaClientConfig extends jspb.Message {
+
+	private static repeatedFields_ = [
+		
+	];
+
+	constructor(data?: jspb.Message.MessageArray) {
+		super();
+		jspb.Message.initialize(this, data || [], 0, -1, AmneziaClientConfig.repeatedFields_, null);
+	}
+
+
+	getJc(): number {return jspb.Message.getFieldWithDefault(this, 1, 0);
+	}
+
+	setJc(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 1, value);
+	}
+
+	getJmin(): number {return jspb.Message.getFieldWithDefault(this, 2, 0);
+	}
+
+	setJmin(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 2, value);
+	}
+
+	getJmax(): number {return jspb.Message.getFieldWithDefault(this, 3, 0);
+	}
+
+	setJmax(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 3, value);
+	}
+
+	getS1(): number {return jspb.Message.getFieldWithDefault(this, 4, 0);
+	}
+
+	setS1(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 4, value);
+	}
+
+	getS2(): number {return jspb.Message.getFieldWithDefault(this, 5, 0);
+	}
+
+	setS2(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 5, value);
+	}
+
+	getS3(): number {return jspb.Message.getFieldWithDefault(this, 6, 0);
+	}
+
+	setS3(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 6, value);
+	}
+
+	getS4(): number {return jspb.Message.getFieldWithDefault(this, 7, 0);
+	}
+
+	setS4(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 7, value);
+	}
+
+	getH1(): string {return jspb.Message.getFieldWithDefault(this, 8, "");
+	}
+
+	setH1(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 8, value);
+	}
+
+	getH2(): string {return jspb.Message.getFieldWithDefault(this, 9, "");
+	}
+
+	setH2(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 9, value);
+	}
+
+	getH3(): string {return jspb.Message.getFieldWithDefault(this, 10, "");
+	}
+
+	setH3(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 10, value);
+	}
+
+	getH4(): string {return jspb.Message.getFieldWithDefault(this, 11, "");
+	}
+
+	setH4(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 11, value);
+	}
+
+	getI1(): string {return jspb.Message.getFieldWithDefault(this, 12, "");
+	}
+
+	setI1(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 12, value);
+	}
+
+	getI2(): string {return jspb.Message.getFieldWithDefault(this, 13, "");
+	}
+
+	setI2(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 13, value);
+	}
+
+	getI3(): string {return jspb.Message.getFieldWithDefault(this, 14, "");
+	}
+
+	setI3(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 14, value);
+	}
+
+	getI4(): string {return jspb.Message.getFieldWithDefault(this, 15, "");
+	}
+
+	setI4(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 15, value);
+	}
+
+	getI5(): string {return jspb.Message.getFieldWithDefault(this, 16, "");
+	}
+
+	setI5(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 16, value);
+	}
+
+	getContentPaddingAddition(): string {return jspb.Message.getFieldWithDefault(this, 17, "");
+	}
+
+	setContentPaddingAddition(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 17, value);
+	}
+
+	getRekeyAfterTime(): string {return jspb.Message.getFieldWithDefault(this, 18, "");
+	}
+
+	setRekeyAfterTime(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 18, value);
+	}
+
+	getRekeyTimeout(): string {return jspb.Message.getFieldWithDefault(this, 19, "");
+	}
+
+	setRekeyTimeout(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 19, value);
+	}
+
+	getRejectAfterTime(): string {return jspb.Message.getFieldWithDefault(this, 20, "");
+	}
+
+	setRejectAfterTime(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 20, value);
+	}
+
+	getKeepaliveTimeout(): string {return jspb.Message.getFieldWithDefault(this, 21, "");
+	}
+
+	setKeepaliveTimeout(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 21, value);
+	}
+
+	getMaxHandshakeAttempts(): string {return jspb.Message.getFieldWithDefault(this, 22, "");
+	}
+
+	setMaxHandshakeAttempts(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 22, value);
+	}
+
+	serializeBinary(): Uint8Array {
+		const writer = new jspb.BinaryWriter();
+		AmneziaClientConfig.serializeBinaryToWriter(this, writer);
+		return writer.getResultBuffer();
+	}
+
+	toObject(): AmneziaClientConfig.AsObject {
+		let f: any;
+		return {
+			jc: this.getJc(),
+			jmin: this.getJmin(),
+			jmax: this.getJmax(),
+			s1: this.getS1(),
+			s2: this.getS2(),
+			s3: this.getS3(),
+			s4: this.getS4(),
+			h1: this.getH1(),
+			h2: this.getH2(),
+			h3: this.getH3(),
+			h4: this.getH4(),
+			i1: this.getI1(),
+			i2: this.getI2(),
+			i3: this.getI3(),
+			i4: this.getI4(),
+			i5: this.getI5(),
+			contentPaddingAddition: this.getContentPaddingAddition(),
+			rekeyAfterTime: this.getRekeyAfterTime(),
+			rekeyTimeout: this.getRekeyTimeout(),
+			rejectAfterTime: this.getRejectAfterTime(),
+			keepaliveTimeout: this.getKeepaliveTimeout(),
+			maxHandshakeAttempts: this.getMaxHandshakeAttempts(),
+		};
+	}
+
+	static serializeBinaryToWriter(message: AmneziaClientConfig, writer: jspb.BinaryWriter): void {
+		const field1 = message.getJc();
+		if (field1 != 0) {
+			writer.writeUint32(1, field1);
+		}
+		const field2 = message.getJmin();
+		if (field2 != 0) {
+			writer.writeUint32(2, field2);
+		}
+		const field3 = message.getJmax();
+		if (field3 != 0) {
+			writer.writeUint32(3, field3);
+		}
+		const field4 = message.getS1();
+		if (field4 != 0) {
+			writer.writeUint32(4, field4);
+		}
+		const field5 = message.getS2();
+		if (field5 != 0) {
+			writer.writeUint32(5, field5);
+		}
+		const field6 = message.getS3();
+		if (field6 != 0) {
+			writer.writeUint32(6, field6);
+		}
+		const field7 = message.getS4();
+		if (field7 != 0) {
+			writer.writeUint32(7, field7);
+		}
+		const field8 = message.getH1();
+		if (field8.length > 0) {
+			writer.writeString(8, field8);
+		}
+		const field9 = message.getH2();
+		if (field9.length > 0) {
+			writer.writeString(9, field9);
+		}
+		const field10 = message.getH3();
+		if (field10.length > 0) {
+			writer.writeString(10, field10);
+		}
+		const field11 = message.getH4();
+		if (field11.length > 0) {
+			writer.writeString(11, field11);
+		}
+		const field12 = message.getI1();
+		if (field12.length > 0) {
+			writer.writeString(12, field12);
+		}
+		const field13 = message.getI2();
+		if (field13.length > 0) {
+			writer.writeString(13, field13);
+		}
+		const field14 = message.getI3();
+		if (field14.length > 0) {
+			writer.writeString(14, field14);
+		}
+		const field15 = message.getI4();
+		if (field15.length > 0) {
+			writer.writeString(15, field15);
+		}
+		const field16 = message.getI5();
+		if (field16.length > 0) {
+			writer.writeString(16, field16);
+		}
+		const field17 = message.getContentPaddingAddition();
+		if (field17.length > 0) {
+			writer.writeString(17, field17);
+		}
+		const field18 = message.getRekeyAfterTime();
+		if (field18.length > 0) {
+			writer.writeString(18, field18);
+		}
+		const field19 = message.getRekeyTimeout();
+		if (field19.length > 0) {
+			writer.writeString(19, field19);
+		}
+		const field20 = message.getRejectAfterTime();
+		if (field20.length > 0) {
+			writer.writeString(20, field20);
+		}
+		const field21 = message.getKeepaliveTimeout();
+		if (field21.length > 0) {
+			writer.writeString(21, field21);
+		}
+		const field22 = message.getMaxHandshakeAttempts();
+		if (field22.length > 0) {
+			writer.writeString(22, field22);
+		}
+	}
+
+	static deserializeBinary(bytes: Uint8Array): AmneziaClientConfig {
+		var reader = new jspb.BinaryReader(bytes);
+		var message = new AmneziaClientConfig();
+		return AmneziaClientConfig.deserializeBinaryFromReader(message, reader);
+	}
+
+	static deserializeBinaryFromReader(message: AmneziaClientConfig, reader: jspb.BinaryReader): AmneziaClientConfig {
+		while (reader.nextField()) {
+			if (reader.isEndGroup()) {
+				break;
+			}
+			const field = reader.getFieldNumber();
+			switch (field) {
+			case 1:
+				const field1 = reader.readUint32()
+				message.setJc(field1);
+				break;
+			case 2:
+				const field2 = reader.readUint32()
+				message.setJmin(field2);
+				break;
+			case 3:
+				const field3 = reader.readUint32()
+				message.setJmax(field3);
+				break;
+			case 4:
+				const field4 = reader.readUint32()
+				message.setS1(field4);
+				break;
+			case 5:
+				const field5 = reader.readUint32()
+				message.setS2(field5);
+				break;
+			case 6:
+				const field6 = reader.readUint32()
+				message.setS3(field6);
+				break;
+			case 7:
+				const field7 = reader.readUint32()
+				message.setS4(field7);
+				break;
+			case 8:
+				const field8 = reader.readString()
+				message.setH1(field8);
+				break;
+			case 9:
+				const field9 = reader.readString()
+				message.setH2(field9);
+				break;
+			case 10:
+				const field10 = reader.readString()
+				message.setH3(field10);
+				break;
+			case 11:
+				const field11 = reader.readString()
+				message.setH4(field11);
+				break;
+			case 12:
+				const field12 = reader.readString()
+				message.setI1(field12);
+				break;
+			case 13:
+				const field13 = reader.readString()
+				message.setI2(field13);
+				break;
+			case 14:
+				const field14 = reader.readString()
+				message.setI3(field14);
+				break;
+			case 15:
+				const field15 = reader.readString()
+				message.setI4(field15);
+				break;
+			case 16:
+				const field16 = reader.readString()
+				message.setI5(field16);
+				break;
+			case 17:
+				const field17 = reader.readString()
+				message.setContentPaddingAddition(field17);
+				break;
+			case 18:
+				const field18 = reader.readString()
+				message.setRekeyAfterTime(field18);
+				break;
+			case 19:
+				const field19 = reader.readString()
+				message.setRekeyTimeout(field19);
+				break;
+			case 20:
+				const field20 = reader.readString()
+				message.setRejectAfterTime(field20);
+				break;
+			case 21:
+				const field21 = reader.readString()
+				message.setKeepaliveTimeout(field21);
+				break;
+			case 22:
+				const field22 = reader.readString()
+				message.setMaxHandshakeAttempts(field22);
+				break;
 			default:
 				reader.skipField();
 				break;
@@ -659,6 +1106,7 @@ function InfoResFromObject(obj: InfoRes.AsObject | undefined): InfoRes | undefin
 	message.setApiTokenMaxLifetime(DurationFromObject(obj.apiTokenMaxLifetime));
 	message.setUserDisplayName(obj.userDisplayName);
 	message.setUserProvider(obj.userProvider);
+	message.setAmnezia(AmneziaClientConfigFromObject(obj.amnezia));
 	return message;
 }
 
@@ -688,6 +1136,36 @@ function BuildInfoFromObject(obj: buildinfo.BuildInfo.AsObject | undefined): bui
 	const message = new buildinfo.BuildInfo();
 	message.setVersion(obj.version);
 	message.setCommit(obj.commit);
+	return message;
+}
+
+function AmneziaClientConfigFromObject(obj: AmneziaClientConfig.AsObject | undefined): AmneziaClientConfig | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new AmneziaClientConfig();
+	message.setJc(obj.jc);
+	message.setJmin(obj.jmin);
+	message.setJmax(obj.jmax);
+	message.setS1(obj.s1);
+	message.setS2(obj.s2);
+	message.setS3(obj.s3);
+	message.setS4(obj.s4);
+	message.setH1(obj.h1);
+	message.setH2(obj.h2);
+	message.setH3(obj.h3);
+	message.setH4(obj.h4);
+	message.setI1(obj.i1);
+	message.setI2(obj.i2);
+	message.setI3(obj.i3);
+	message.setI4(obj.i4);
+	message.setI5(obj.i5);
+	message.setContentPaddingAddition(obj.contentPaddingAddition);
+	message.setRekeyAfterTime(obj.rekeyAfterTime);
+	message.setRekeyTimeout(obj.rekeyTimeout);
+	message.setRejectAfterTime(obj.rejectAfterTime);
+	message.setKeepaliveTimeout(obj.keepaliveTimeout);
+	message.setMaxHandshakeAttempts(obj.maxHandshakeAttempts);
 	return message;
 }
 

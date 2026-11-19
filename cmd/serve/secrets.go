@@ -36,6 +36,12 @@ func (cmd *servecmd) secretSources() []secretSource {
 			direct:  "WG_WIREGUARD_PRIVATE_KEY / --wireguard-private-key / wireguard.privateKey",
 			fileEnv: "WG_WIREGUARD_PRIVATE_KEY_FILE",
 		},
+		{
+			value:   &cmd.AppConfig.Amnezia.Server.HeaderProtectionKey,
+			file:    cmd.AmneziaHeaderKeyFile,
+			direct:  "WG_AMNEZIA_HEADER_PROTECTION_KEY / --amnezia-header-protection-key / amnezia.server.headerProtectionKey",
+			fileEnv: "WG_AMNEZIA_HEADER_PROTECTION_KEY_FILE",
+		},
 	}
 }
 

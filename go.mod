@@ -9,7 +9,6 @@ require (
 	github.com/coreos/go-iptables v0.8.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/freifunkMUC/pg-events v0.6.0
-	github.com/freifunkMUC/wg-embed v0.12.2
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/goccy/go-yaml v1.19.2
@@ -20,6 +19,7 @@ require (
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/miekg/dns v1.1.73
 	github.com/prometheus/client_golang v1.25.0
+	github.com/sampletext32/amneziawg-embed v0.2.1
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/tg123/go-htpasswd v1.2.5
@@ -38,6 +38,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5 // indirect
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
+	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20261116 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.10.0 // indirect

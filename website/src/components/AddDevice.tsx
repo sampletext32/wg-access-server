@@ -14,7 +14,6 @@ import Input from '@mui/material/Input';
 import InputLabel from '@mui/material/InputLabel';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
-import { codeBlock } from 'common-tags';
 import { observer } from 'mobx-react';
 import React from 'react';
 import { box_keyPair, randomBytes } from 'tweetnacl-ts';
@@ -22,6 +21,7 @@ import { grpc } from '../Api';
 import { AppState } from '../AppState';
 import { InfoRes } from '../sdk/server_pb';
 import { GetConnected } from './GetConnected';
+import { amneziaLines } from './amnezia';
 import { Info } from './Info';
 
 import Accordion from '@mui/material/Accordion';
@@ -305,18 +305,25 @@ export function clientConfig(opts: {
     dnsInfo.push(info.clientConfigDnsSearchDomain);
   }
 
-  return codeBlock`
-        [Interface]
-        PrivateKey = ${opts.privateKey}
-        Address = ${opts.address}
-        ${0 < dnsInfo.length && `DNS = ${dnsInfo.join(', ')}`}
-        ${info.clientConfigMtu != 0 && `MTU = ${info.clientConfigMtu}`}
+  // Built as lines rather than a template: the AmneziaWG part is a list of
+  // optional lines, and a server without a profile has to produce exactly the
+  // plain WireGuard file it always did.
+  const lines = [`[Interface]`, `PrivateKey = ${opts.privateKey}`, `Address = ${opts.address}`];
+  if (dnsInfo.length > 0) {
+    lines.push(`DNS = ${dnsInfo.join(', ')}`);
+  }
+  if (info.clientConfigMtu != 0) {
+    lines.push(`MTU = ${info.clientConfigMtu}`);
+  }
+  lines.push(...amneziaLines(info.amnezia));
 
-        [Peer]
-        PublicKey = ${info.publicKey}
-        AllowedIPs = ${info.allowedIps}
-        Endpoint = ${`${info.host?.value || window.location.hostname}:${info.port || '51820'}`}
-        ${opts.presharedKey ? `PresharedKey = ${opts.presharedKey}` : ``}
-        ${opts.persistentKeepalive > 0 ? `PersistentKeepalive = ${opts.persistentKeepalive}` : ``}
-      `;
+  lines.push('', '[Peer]', `PublicKey = ${info.publicKey}`, `AllowedIPs = ${info.allowedIps}`);
+  lines.push(`Endpoint = ${info.host?.value || window.location.hostname}:${info.port || '51820'}`);
+  if (opts.presharedKey) {
+    lines.push(`PresharedKey = ${opts.presharedKey}`);
+  }
+  if (opts.persistentKeepalive > 0) {
+    lines.push(`PersistentKeepalive = ${opts.persistentKeepalive}`);
+  }
+  return lines.join('\n');
 }

@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
 	"github.com/gorilla/mux"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 
 	"github.com/freifunkMUC/wg-access-server/internal/apitokens"
 	"github.com/freifunkMUC/wg-access-server/internal/config"

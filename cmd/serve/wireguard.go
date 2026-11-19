@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"sort"
 
-	"github.com/freifunkMUC/wg-embed/pkg/wgembed"
+	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 
@@ -98,6 +98,9 @@ func (cmd *servecmd) startWireGuard(conf *config.AppConfig, vpn vpnAddressing) (
 			Address:    vpn.prefixes,
 			ListenPort: &conf.WireGuard.Port,
 			MTU:        &conf.WireGuard.MTU,
+			// The shared half of the profile and the header protection key. The
+			// client-only values have no meaning on the server's interface.
+			Amnezia: conf.Amnezia.DeviceConfig(),
 		},
 	}
 	if err := wg.LoadConfig(wgconfig); err != nil {

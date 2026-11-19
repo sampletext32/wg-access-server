@@ -172,6 +172,19 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 		logrus.Fatal(err)
 	}
 
+	// A profile the device or a client would reject has to stop the server here:
+	// afterwards it looks like a VPN that simply does not connect.
+	mtu := cmd.AppConfig.ClientConfig.MTU
+	if mtu == 0 {
+		mtu = cmd.AppConfig.WireGuard.MTU
+	}
+	if err := cmd.AppConfig.Amnezia.Validate(mtu); err != nil {
+		logrus.Fatalf("invalid AmneziaWG configuration: %v", err)
+	}
+	if cmd.AppConfig.WireGuard.Enabled && cmd.AppConfig.Amnezia.IsZero() {
+		logrus.Warn("No AmneziaWG profile is configured: the server speaks plain WireGuard, which is easy to detect. Set the amnezia section (or WG_AMNEZIA_HEADER_PROTECTION_KEY) to run it as AmneziaWG")
+	}
+
 	firewall, err := network.ResolveFirewall(cmd.AppConfig.VPN.Firewall, cmd.AppConfig.VPN.DisableIPTables)
 	if err != nil {
 		logrus.Fatal(err)
