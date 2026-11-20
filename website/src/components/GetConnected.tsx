@@ -16,6 +16,7 @@ import { download } from '../Util';
 import { LinuxIcon } from './Icons';
 import AppleIcon from '@mui/icons-material/Apple';
 import MicrosoftIcon from '@mui/icons-material/Microsoft';
+import { isAmnezia } from './clientProduct';
 import { QRCode } from './QRCode';
 import { TabPanel } from './TabPanel';
 
@@ -26,6 +27,9 @@ interface Props {
 
 export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props>) {
   const [currentTab, setCurrentTab] = React.useState(isMobile() && showMobile ? 'mobile' : 'desktop');
+  // An AmneziaWG configuration cannot be imported by the WireGuard app, so the
+  // instructions have to name the client that can read it.
+  const amnezia = isAmnezia(AppState.info);
 
   const go = (href: string) => {
     window.open(href, '__blank', 'noopener noreferrer');
@@ -34,7 +38,7 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
   const downloadConfigFile = () => {
     const info = AppState.info!;
     download({
-      filename: info.filename.length > 0 ? info.filename + '.conf' : 'WireGuard.conf',
+      filename: info.filename.length > 0 ? info.filename + '.conf' : amnezia ? 'AmneziaWG.conf' : 'WireGuard.conf',
       content: configFile,
     });
   };
@@ -58,18 +62,27 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
         <Box sx={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
           <List>
             <ListItem>
-              <ListItemText style={{ width: 300 }} primary="1. Install the WireGuard app" />
-              <ButtonGroup size="large" color="primary" aria-label="Download the WireGuard app">
-                <Button onClick={() => go('https://www.WireGuard.com/install/')}>
-                  <LinuxIcon />
+              <ListItemText
+                style={{ width: 300 }}
+                primary={amnezia ? '1. Install an AmneziaWG client' : '1. Install the WireGuard app'}
+              />
+              {amnezia ? (
+                <Button variant="outlined" color="primary" onClick={() => go('https://storage.googleapis.com/amnezia/amnezia.org')}>
+                  <GetApp /> Download
                 </Button>
-                <Button onClick={() => go('https://www.wireguard.com/install/')}>
-                  <MicrosoftIcon />
-                </Button>
-                <Button onClick={() => go('https://www.wireguard.com/install/#macos-app-store')}>
-                  <AppleIcon />
-                </Button>
-              </ButtonGroup>
+              ) : (
+                <ButtonGroup size="large" color="primary" aria-label="Download the WireGuard app">
+                  <Button onClick={() => go('https://www.WireGuard.com/install/')}>
+                    <LinuxIcon />
+                  </Button>
+                  <Button onClick={() => go('https://www.wireguard.com/install/')}>
+                    <MicrosoftIcon />
+                  </Button>
+                  <Button onClick={() => go('https://www.wireguard.com/install/#macos-app-store')}>
+                    <AppleIcon />
+                  </Button>
+                </ButtonGroup>
+              )}
             </ListItem>
             <ListItem>
               <ListItemText style={{ width: 300 }} primary="2. Download your connection file" />
@@ -90,13 +103,13 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
             <Box>
               <List>
                 <ListItem>
-                  <ListItemText primary="1. Install the WireGuard app" />
+                  <ListItemText primary={amnezia ? '1. Install an AmneziaWG client' : '1. Install the WireGuard app'} />
                 </ListItem>
                 <ListItem>
-                  <ListItemText primary="2. Add a tunnel" />
+                  <ListItemText primary={amnezia ? '2. Add a connection' : '2. Add a tunnel'} />
                 </ListItem>
                 <ListItem>
-                  <ListItemText primary="3. Create from QR code" />
+                  <ListItemText primary={amnezia ? '3. Scan the QR code' : '3. Create from QR code'} />
                 </ListItem>
               </List>
             </Box>

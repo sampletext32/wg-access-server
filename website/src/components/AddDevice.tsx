@@ -20,6 +20,7 @@ import { box_keyPair, randomBytes } from 'tweetnacl-ts';
 import { grpc } from '../Api';
 import { AppState } from '../AppState';
 import { InfoRes } from '../sdk/server_pb';
+import { clientProductName } from './clientProduct';
 import { GetConnected } from './GetConnected';
 import { amneziaLines } from './amnezia';
 import { Info } from './Info';
@@ -262,8 +263,8 @@ export const AddDevice = observer(function AddDevice({ onAdd, onRefresh }: Props
               If you lose this file you can simply create a new device on this portal to generate a new connection file.
             </Typography>
             <Typography component="p">
-              The connection file contains your WireGuard Private Key (i.e. password) and should <strong>never</strong>{' '}
-              be shared.
+              The connection file contains your {clientProductName(AppState.info)} private key (i.e. password) and
+              should <strong>never</strong> be shared.
             </Typography>
           </Info>
         </DialogTitle>

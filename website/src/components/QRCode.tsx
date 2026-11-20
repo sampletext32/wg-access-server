@@ -41,7 +41,7 @@ export function QRCode(props: Props) {
       }}
     >
       <img
-        alt="WireGuard QR code"
+        alt="Connection QR code"
         src={uri}
         style={{
           display: 'block',
