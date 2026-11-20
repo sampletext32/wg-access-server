@@ -661,6 +661,9 @@ export declare namespace AmneziaClientConfig {
 		rejectAfterTime: string,
 		keepaliveTimeout: string,
 		maxHandshakeAttempts: string,
+		headerProtectionKey: string,
+		randomTrailers: boolean,
+		disableCookies: boolean,
 	}
 }
 
@@ -830,6 +833,27 @@ export class AmneziaClientConfig extends jspb.Message {
 		(jspb.Message as any).setProto3StringField(this, 22, value);
 	}
 
+	getHeaderProtectionKey(): string {return jspb.Message.getFieldWithDefault(this, 23, "");
+	}
+
+	setHeaderProtectionKey(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 23, value);
+	}
+
+	getRandomTrailers(): boolean {return jspb.Message.getFieldWithDefault(this, 24, false);
+	}
+
+	setRandomTrailers(value: boolean): void {
+		(jspb.Message as any).setProto3BooleanField(this, 24, value);
+	}
+
+	getDisableCookies(): boolean {return jspb.Message.getFieldWithDefault(this, 25, false);
+	}
+
+	setDisableCookies(value: boolean): void {
+		(jspb.Message as any).setProto3BooleanField(this, 25, value);
+	}
+
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		AmneziaClientConfig.serializeBinaryToWriter(this, writer);
@@ -861,6 +885,9 @@ export class AmneziaClientConfig extends jspb.Message {
 			rejectAfterTime: this.getRejectAfterTime(),
 			keepaliveTimeout: this.getKeepaliveTimeout(),
 			maxHandshakeAttempts: this.getMaxHandshakeAttempts(),
+			headerProtectionKey: this.getHeaderProtectionKey(),
+			randomTrailers: this.getRandomTrailers(),
+			disableCookies: this.getDisableCookies(),
 		};
 	}
 
@@ -952,6 +979,18 @@ export class AmneziaClientConfig extends jspb.Message {
 		const field22 = message.getMaxHandshakeAttempts();
 		if (field22.length > 0) {
 			writer.writeString(22, field22);
+		}
+		const field23 = message.getHeaderProtectionKey();
+		if (field23.length > 0) {
+			writer.writeString(23, field23);
+		}
+		const field24 = message.getRandomTrailers();
+		if (field24 != false) {
+			writer.writeBool(24, field24);
+		}
+		const field25 = message.getDisableCookies();
+		if (field25 != false) {
+			writer.writeBool(25, field25);
 		}
 	}
 
@@ -1055,6 +1094,18 @@ export class AmneziaClientConfig extends jspb.Message {
 			case 22:
 				const field22 = reader.readString()
 				message.setMaxHandshakeAttempts(field22);
+				break;
+			case 23:
+				const field23 = reader.readString()
+				message.setHeaderProtectionKey(field23);
+				break;
+			case 24:
+				const field24 = reader.readBool()
+				message.setRandomTrailers(field24);
+				break;
+			case 25:
+				const field25 = reader.readBool()
+				message.setDisableCookies(field25);
 				break;
 			default:
 				reader.skipField();
@@ -1166,6 +1217,9 @@ function AmneziaClientConfigFromObject(obj: AmneziaClientConfig.AsObject | undef
 	message.setRejectAfterTime(obj.rejectAfterTime);
 	message.setKeepaliveTimeout(obj.keepaliveTimeout);
 	message.setMaxHandshakeAttempts(obj.maxHandshakeAttempts);
+	message.setHeaderProtectionKey(obj.headerProtectionKey);
+	message.setRandomTrailers(obj.randomTrailers);
+	message.setDisableCookies(obj.disableCookies);
 	return message;
 }
 

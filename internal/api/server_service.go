@@ -144,8 +144,12 @@ func clientConfigDnsServers(config *config.AppConfig) string {
 
 // amneziaClientConfig is the part of the AmneziaWG profile a client needs. It
 // is nil when no profile is configured, in which case a configuration file is
-// a plain WireGuard one. The header protection key is server-side only and
-// never leaves the server this way.
+// a plain WireGuard one.
+//
+// The header protection key is included: AmneziaWG encrypts the packet header
+// with a key both ends have, so a client without it cannot read anything from
+// this server. It is not per-device data - every client gets the same key,
+// like the padding and the header ranges.
 func amneziaClientConfig(a config.AmneziaConfig) *proto.AmneziaClientConfig {
 	if a.IsZero() {
 		return nil
@@ -167,11 +171,14 @@ func amneziaClientConfig(a config.AmneziaConfig) *proto.AmneziaClientConfig {
 		I3:                     a.Client.I3,
 		I4:                     a.Client.I4,
 		I5:                     a.Client.I5,
-		ContentPaddingAddition: a.Client.ContentPaddingAddition,
+		ContentPaddingAddition: a.Shared.ContentPaddingAddition,
 		RekeyAfterTime:         a.Client.RekeyAfterTime,
 		RekeyTimeout:           a.Client.RekeyTimeout,
 		RejectAfterTime:        a.Client.RejectAfterTime,
 		KeepaliveTimeout:       a.Client.KeepaliveTimeout,
 		MaxHandshakeAttempts:   a.Client.MaxHandshakeAttempts,
+		HeaderProtectionKey:    a.Server.HeaderProtectionKey,
+		RandomTrailers:         a.Shared.RandomTrailers,
+		DisableCookies:         a.Shared.DisableCookies,
 	}
 }

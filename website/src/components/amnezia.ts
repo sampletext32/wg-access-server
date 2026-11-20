@@ -4,9 +4,11 @@ import { AmneziaClientConfig } from '../sdk/server_pb';
 // when the server set it, so a server without a profile produces exactly the
 // plain WireGuard file it produced before.
 //
-// S1-S4 and H1-H4 are the values the server's own interface carries; the rest
-// only shapes this client's packets. The server's header protection key is
-// deliberately not among them: a client never needs it.
+// S1-S4, H1-H4, the header protection key, random trailers, disabled cookies
+// and content padding are the values the server's own interface carries; the
+// rest only shapes this client's packets. The header protection key is a secret
+// on the server, not from its clients: AmneziaWG encrypts the packet header
+// with it, so a client without it cannot read anything.
 export function amneziaLines(amnezia?: AmneziaClientConfig.AsObject): string[] {
   if (!amnezia) {
     return [];
@@ -21,6 +23,11 @@ export function amneziaLines(amnezia?: AmneziaClientConfig.AsObject): string[] {
   const text = (name: string, value: string) => {
     if (value) {
       lines.push(`${name} = ${value}`);
+    }
+  };
+  const flag = (name: string, on: boolean) => {
+    if (on) {
+      lines.push(`${name} = on`);
     }
   };
 
@@ -38,18 +45,22 @@ export function amneziaLines(amnezia?: AmneziaClientConfig.AsObject): string[] {
   text('H3', amnezia.h3);
   text('H4', amnezia.h4);
 
-  text('I1', amnezia.i1);
-  text('I2', amnezia.i2);
-  text('I3', amnezia.i3);
-  text('I4', amnezia.i4);
-  text('I5', amnezia.i5);
-
+  text('HeaderProtectionKey', amnezia.headerProtectionKey);
   text('ContentPaddingAddition', amnezia.contentPaddingAddition);
+  flag('RandomTrailers', amnezia.randomTrailers);
+  flag('DisableCookies', amnezia.disableCookies);
+
   text('RekeyAfterTime', amnezia.rekeyAfterTime);
   text('RekeyTimeout', amnezia.rekeyTimeout);
   text('RejectAfterTime', amnezia.rejectAfterTime);
   text('KeepaliveTimeout', amnezia.keepaliveTimeout);
   text('MaxHandshakeAttempts', amnezia.maxHandshakeAttempts);
+
+  text('I1', amnezia.i1);
+  text('I2', amnezia.i2);
+  text('I3', amnezia.i3);
+  text('I4', amnezia.i4);
+  text('I5', amnezia.i5);
 
   return lines;
 }

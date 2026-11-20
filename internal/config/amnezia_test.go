@@ -16,10 +16,12 @@ func validProfile() AmneziaConfig {
 			S1: 17, S2: 29, S3: 43, S4: 12,
 			H1: "123456-123500", H2: "67543-67550",
 			H3: "123123-123200", H4: "32345-32350",
+			RandomTrailers: true,
+			DisableCookies: true,
 		},
 		Client: AmneziaClientConfig{
 			JC: 4, JMin: 500, JMax: 1000,
-			I1: "<b 0xf6ab3267fa><c><t>",
+			I1: "<b 0xf6ab3267fa><r 8><t>",
 		},
 	}
 }
@@ -33,6 +35,9 @@ func TestAmneziaConfigIsZero(t *testing.T) {
 	}
 	if (AmneziaConfig{Server: AmneziaServerConfig{HeaderProtectionKey: testHeaderKey}}).IsZero() {
 		t.Fatal("a header protection key alone is a profile")
+	}
+	if (AmneziaConfig{Shared: AmneziaSharedConfig{RandomTrailers: true}}).IsZero() {
+		t.Fatal("random trailers alone are a profile")
 	}
 }
 
@@ -134,6 +139,47 @@ func TestAmneziaConfigValidate(t *testing.T) {
 			mtu:     1360,
 			wantErr: "header protection key is invalid",
 		},
+		{
+			name: "padding the device cannot parse",
+			profile: func() AmneziaConfig {
+				p := validProfile()
+				p.Shared.S1 = 70000
+				return p
+			}(),
+			mtu:     1360,
+			wantErr: "s1 must not be larger than 65535",
+		},
+		{
+			name: "content padding without random trailers",
+			profile: func() AmneziaConfig {
+				p := validProfile()
+				p.Shared.RandomTrailers = false
+				p.Shared.ContentPaddingAddition = "10-20"
+				return p
+			}(),
+			mtu:     1360,
+			wantErr: "needs shared.randomTrailers",
+		},
+		{
+			name: "a signature packet the client cannot parse",
+			profile: func() AmneziaConfig {
+				p := validProfile()
+				p.Client.I1 = "<b 0xf6ab3267fa><c><t>"
+				return p
+			}(),
+			mtu:     1360,
+			wantErr: "uses <c>",
+		},
+		{
+			name: "a signature packet with no tags",
+			profile: func() AmneziaConfig {
+				p := validProfile()
+				p.Client.I2 = "not a packet"
+				return p
+			}(),
+			mtu:     1360,
+			wantErr: "no <...> tag",
+		},
 	}
 
 	for _, test := range tests {
@@ -167,6 +213,9 @@ func TestAmneziaConfigDeviceConfig(t *testing.T) {
 	if device.H1 == nil || *device.H1 != "123456-123500" {
 		t.Error("h1 belongs on the device")
 	}
+	if !device.RandomTrailers || !device.DisableCookies {
+		t.Error("random trailers and disabled cookies change what the receiver accepts, so they belong on the device")
+	}
 	// Client-only values have no meaning on the server's interface.
 	if device.JC != nil || device.JMin != nil || device.JMax != nil {
 		t.Error("junk packet settings must not reach the device")
@@ -187,5 +236,8 @@ func TestAmneziaConfigDeviceConfigOmitsUnsetValues(t *testing.T) {
 	}
 	if device.H1 != nil {
 		t.Error("unset headers must stay unset")
+	}
+	if device.RandomTrailers || device.DisableCookies {
+		t.Error("unset switches must stay off")
 	}
 }

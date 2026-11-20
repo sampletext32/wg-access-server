@@ -102,10 +102,11 @@ type InfoRes struct {
 	// the configured name of the provider this session signed in with, e.g.
 	// "simple" or the name of an OIDC provider
 	UserProvider string `protobuf:"bytes,27,opt,name=user_provider,json=userProvider,proto3" json:"user_provider,omitempty"`
-	// the client half of the AmneziaWG profile. Absent when the server speaks
-	// plain WireGuard; then a configuration file has no AmneziaWG lines at all.
-	// None of it is secret - every client receives it - and the server's header
-	// protection key is deliberately not part of it.
+	// the AmneziaWG profile a client needs. Absent when the server speaks plain
+	// WireGuard; then a configuration file has no AmneziaWG lines at all. It is
+	// not per-user data: every client of this server receives the same values,
+	// the header protection key included, because a client without it cannot
+	// read a single packet from an AmneziaWG server.
 	Amnezia       *AmneziaClientConfig `protobuf:"bytes,28,opt,name=amnezia,proto3" json:"amnezia,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -331,8 +332,9 @@ func (x *InfoRes) GetAmnezia() *AmneziaClientConfig {
 }
 
 // AmneziaClientConfig is what a client needs to talk to an AmneziaWG server:
-// S1-S4 and H1-H4 have to match the server's own values, the rest only shapes
-// the client's packets.
+// S1-S4, H1-H4, the header protection key, random trailers, disabled cookies
+// and content padding have to match the server's own values, the rest only
+// shapes the client's packets.
 type AmneziaClientConfig struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Jc                     uint32                 `protobuf:"varint,1,opt,name=jc,proto3" json:"jc,omitempty"`
@@ -357,8 +359,12 @@ type AmneziaClientConfig struct {
 	RejectAfterTime        string                 `protobuf:"bytes,20,opt,name=reject_after_time,json=rejectAfterTime,proto3" json:"reject_after_time,omitempty"`
 	KeepaliveTimeout       string                 `protobuf:"bytes,21,opt,name=keepalive_timeout,json=keepaliveTimeout,proto3" json:"keepalive_timeout,omitempty"`
 	MaxHandshakeAttempts   string                 `protobuf:"bytes,22,opt,name=max_handshake_attempts,json=maxHandshakeAttempts,proto3" json:"max_handshake_attempts,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// base64, the same form the server's configuration and the client file use
+	HeaderProtectionKey string `protobuf:"bytes,23,opt,name=header_protection_key,json=headerProtectionKey,proto3" json:"header_protection_key,omitempty"`
+	RandomTrailers      bool   `protobuf:"varint,24,opt,name=random_trailers,json=randomTrailers,proto3" json:"random_trailers,omitempty"`
+	DisableCookies      bool   `protobuf:"varint,25,opt,name=disable_cookies,json=disableCookies,proto3" json:"disable_cookies,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *AmneziaClientConfig) Reset() {
@@ -545,6 +551,27 @@ func (x *AmneziaClientConfig) GetMaxHandshakeAttempts() string {
 	return ""
 }
 
+func (x *AmneziaClientConfig) GetHeaderProtectionKey() string {
+	if x != nil {
+		return x.HeaderProtectionKey
+	}
+	return ""
+}
+
+func (x *AmneziaClientConfig) GetRandomTrailers() bool {
+	if x != nil {
+		return x.RandomTrailers
+	}
+	return false
+}
+
+func (x *AmneziaClientConfig) GetDisableCookies() bool {
+	if x != nil {
+		return x.DisableCookies
+	}
+	return false
+}
+
 var File_server_proto protoreflect.FileDescriptor
 
 const file_server_proto_rawDesc = "" +
@@ -584,7 +611,7 @@ const file_server_proto_rawDesc = "" +
 	"\x16api_token_max_lifetime\x18\x19 \x01(\v2\x19.google.protobuf.DurationR\x13apiTokenMaxLifetime\x12*\n" +
 	"\x11user_display_name\x18\x1a \x01(\tR\x0fuserDisplayName\x12#\n" +
 	"\ruser_provider\x18\x1b \x01(\tR\fuserProvider\x124\n" +
-	"\aamnezia\x18\x1c \x01(\v2\x1a.proto.AmneziaClientConfigR\aamneziaJ\x04\b\x04\x10\x05R\vhost_vpn_ip\"\xb5\x04\n" +
+	"\aamnezia\x18\x1c \x01(\v2\x1a.proto.AmneziaClientConfigR\aamneziaJ\x04\b\x04\x10\x05R\vhost_vpn_ip\"\xbb\x05\n" +
 	"\x13AmneziaClientConfig\x12\x0e\n" +
 	"\x02jc\x18\x01 \x01(\rR\x02jc\x12\x12\n" +
 	"\x04jmin\x18\x02 \x01(\rR\x04jmin\x12\x12\n" +
@@ -608,7 +635,10 @@ const file_server_proto_rawDesc = "" +
 	"\rrekey_timeout\x18\x13 \x01(\tR\frekeyTimeout\x12*\n" +
 	"\x11reject_after_time\x18\x14 \x01(\tR\x0frejectAfterTime\x12+\n" +
 	"\x11keepalive_timeout\x18\x15 \x01(\tR\x10keepaliveTimeout\x124\n" +
-	"\x16max_handshake_attempts\x18\x16 \x01(\tR\x14maxHandshakeAttempts22\n" +
+	"\x16max_handshake_attempts\x18\x16 \x01(\tR\x14maxHandshakeAttempts\x122\n" +
+	"\x15header_protection_key\x18\x17 \x01(\tR\x13headerProtectionKey\x12'\n" +
+	"\x0frandom_trailers\x18\x18 \x01(\bR\x0erandomTrailers\x12'\n" +
+	"\x0fdisable_cookies\x18\x19 \x01(\bR\x0edisableCookies22\n" +
 	"\x06Server\x12(\n" +
 	"\x04Info\x12\x0e.proto.InfoReq\x1a\x0e.proto.InfoRes\"\x00B5Z3github.com/freifunkMUC/wg-access-server/proto/protob\x06proto3"
 

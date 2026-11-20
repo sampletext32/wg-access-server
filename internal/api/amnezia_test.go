@@ -19,12 +19,14 @@ func TestAmneziaClientConfigCarriesWhatAClientNeeds(t *testing.T) {
 			S1: 17, S2: 29, S3: 43, S4: 12,
 			H1: "123456-123500", H2: "67543-67550",
 			H3: "123123-123200", H4: "32345-32350",
+			RandomTrailers:         true,
+			DisableCookies:         true,
+			ContentPaddingAddition: "10-20",
 		},
 		Client: config.AmneziaClientConfig{
 			JC: 4, JMin: 500, JMax: 1000,
-			I1:                     "<b 0xf6ab3267fa><c><t>",
-			ContentPaddingAddition: "10-20",
-			MaxHandshakeAttempts:   "5",
+			I1:                   "<b 0xf6ab3267fa><r 8><t>",
+			MaxHandshakeAttempts: "5",
 		},
 	}
 
@@ -42,10 +44,18 @@ func TestAmneziaClientConfigCarriesWhatAClientNeeds(t *testing.T) {
 	if got.H1 != "123456-123500" || got.H2 != "67543-67550" || got.H3 != "123123-123200" || got.H4 != "32345-32350" {
 		t.Errorf("headers not carried: %+v", got)
 	}
-	if got.I1 != "<b 0xf6ab3267fa><c><t>" {
+	if got.I1 != "<b 0xf6ab3267fa><r 8><t>" {
 		t.Errorf("signature packet not carried: %q", got.I1)
+	}
+	if !got.RandomTrailers || !got.DisableCookies {
+		t.Errorf("random trailers and disabled cookies not carried: %+v", got)
 	}
 	if got.ContentPaddingAddition != "10-20" || got.MaxHandshakeAttempts != "5" {
 		t.Errorf("padding/timing settings not carried: %+v", got)
+	}
+	// The header cipher needs the same key at both ends, so a client without
+	// it would receive packets it cannot read.
+	if got.HeaderProtectionKey != "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" {
+		t.Errorf("header protection key not carried: %q", got.HeaderProtectionKey)
 	}
 }

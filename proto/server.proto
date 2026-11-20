@@ -64,16 +64,18 @@ message InfoRes {
   // the configured name of the provider this session signed in with, e.g.
   // "simple" or the name of an OIDC provider
   string user_provider = 27;
-  // the client half of the AmneziaWG profile. Absent when the server speaks
-  // plain WireGuard; then a configuration file has no AmneziaWG lines at all.
-  // None of it is secret - every client receives it - and the server's header
-  // protection key is deliberately not part of it.
+  // the AmneziaWG profile a client needs. Absent when the server speaks plain
+  // WireGuard; then a configuration file has no AmneziaWG lines at all. It is
+  // not per-user data: every client of this server receives the same values,
+  // the header protection key included, because a client without it cannot
+  // read a single packet from an AmneziaWG server.
   AmneziaClientConfig amnezia = 28;
 }
 
 // AmneziaClientConfig is what a client needs to talk to an AmneziaWG server:
-// S1-S4 and H1-H4 have to match the server's own values, the rest only shapes
-// the client's packets.
+// S1-S4, H1-H4, the header protection key, random trailers, disabled cookies
+// and content padding have to match the server's own values, the rest only
+// shapes the client's packets.
 message AmneziaClientConfig {
   uint32 jc = 1;
   uint32 jmin = 2;
@@ -97,4 +99,8 @@ message AmneziaClientConfig {
   string reject_after_time = 20;
   string keepalive_timeout = 21;
   string max_handshake_attempts = 22;
+  // base64, the same form the server's configuration and the client file use
+  string header_protection_key = 23;
+  bool random_trailers = 24;
+  bool disable_cookies = 25;
 }

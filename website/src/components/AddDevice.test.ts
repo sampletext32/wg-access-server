@@ -88,12 +88,16 @@ describe('clientConfig', () => {
     expect(file).toContain('S4 = 12');
     expect(file).toContain('H1 = 123456-123500');
     expect(file).toContain('H4 = 32345-32350');
+    // the header cipher needs the same key on both ends
+    expect(file).toContain('HeaderProtectionKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=');
+    expect(file).toContain('RandomTrailers = on');
+    expect(file).toContain('DisableCookies = on');
+    expect(file).toContain('ContentPaddingAddition = 10-20');
     // client-only
     expect(file).toContain('Jc = 4');
     expect(file).toContain('Jmin = 500');
     expect(file).toContain('Jmax = 1000');
-    expect(file).toContain('I1 = <b 0xf6ab3267fa><c><t>');
-    expect(file).toContain('ContentPaddingAddition = 10-20');
+    expect(file).toContain('I1 = <b 0xf6ab3267fa><r 8><t>');
   });
 
   it('writes the AmneziaWG lines into the interface section', () => {
@@ -125,7 +129,7 @@ function amneziaProfile(): AmneziaClientConfig.AsObject {
     h2: '67543-67550',
     h3: '123123-123200',
     h4: '32345-32350',
-    i1: '<b 0xf6ab3267fa><c><t>',
+    i1: '<b 0xf6ab3267fa><r 8><t>',
     i2: '',
     i3: '',
     i4: '',
@@ -136,5 +140,8 @@ function amneziaProfile(): AmneziaClientConfig.AsObject {
     rejectAfterTime: '',
     keepaliveTimeout: '',
     maxHandshakeAttempts: '',
+    headerProtectionKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    randomTrailers: true,
+    disableCookies: true,
   };
 }

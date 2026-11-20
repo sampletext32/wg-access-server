@@ -48,6 +48,9 @@ const amnezia = {
   rejectAfterTime: '',
   keepaliveTimeout: '',
   maxHandshakeAttempts: '',
+  headerProtectionKey: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+  randomTrailers: true,
+  disableCookies: true,
 };
 
 describe('clientProduct', () => {
