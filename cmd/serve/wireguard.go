@@ -43,11 +43,37 @@ func vpnAddresses(conf *config.AppConfig) vpnAddressing {
 		if !address.prefix.IsValid() {
 			continue
 		}
-		conf.VPN.AllowedIPs = append(conf.VPN.AllowedIPs, netip.PrefixFrom(address.prefix.Addr(), address.bits).String())
+		// The route to the server's own address is what lets a client reach the
+		// embedded DNS proxy, so it is added when nothing else covers it. A
+		// redundant entry is not harmless: clients read every route beyond the
+		// default ones as "split tunneling is decided by the server", and the
+		// Android app turns the user's own split tunneling off as soon as it
+		// sees one - so a "/32" next to 0.0.0.0/0 silently takes the feature
+		// away from every phone.
+		if !allowedNetworksCover(conf.VPN.AllowedIPs, address.prefix.Addr()) {
+			conf.VPN.AllowedIPs = append(conf.VPN.AllowedIPs, netip.PrefixFrom(address.prefix.Addr(), address.bits).String())
+		}
 		addressing.prefixes = append(addressing.prefixes, address.prefix.String())
 		addressing.addrs = append(addressing.addrs, address.prefix.Addr())
 	}
 	return addressing
+}
+
+// allowedNetworksCover reports whether one of the configured networks already
+// contains the address, which makes a separate route for it redundant.
+func allowedNetworksCover(allowed []string, addr netip.Addr) bool {
+	for _, entry := range allowed {
+		if prefix, err := netip.ParsePrefix(entry); err == nil {
+			if prefix.Contains(addr) {
+				return true
+			}
+			continue
+		}
+		if bare, err := netip.ParseAddr(entry); err == nil && bare == addr {
+			return true
+		}
+	}
+	return false
 }
 
 // startWireGuard brings up the interface and the forwarding rules for it. The
