@@ -36,7 +36,7 @@ Since the upstream is currently unmaintained, we try to add new features and kee
 - PostgreSQL, MySQL or SQLite storage; several replicas can share PostgreSQL or MySQL
 - An [audit log](https://www.freie-netze.org/wg-access-server/audit/) and Prometheus [metrics](#metrics)
 - Commands to run when the WireGuard interface comes up or goes down
-- The WireGuard kernel module where available, with an embedded userspace implementation as fallback
+- An embedded AmneziaWG userspace dataplane (the AmneziaWG kernel module is not supported by this fork yet)
 - Dark and light mode, switched with the sun/moon button in the bar
 
 ## Documentation
@@ -55,10 +55,11 @@ Quick Links:
 
 ## Try it out
 
-Load the kernel modules on the host, then start the container:
+Load the iptables kernel modules on the host, then start the container (the
+AmneziaWG dataplane runs in userspace, so no WireGuard kernel module is used):
 
 ```bash
-modprobe ip_tables && modprobe ip6_tables && modprobe wireguard
+modprobe ip_tables && modprobe ip6_tables
 
 export WG_ADMIN_PASSWORD=$(tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1)
 export WG_WIREGUARD_PRIVATE_KEY="$(wg genkey)"
@@ -88,7 +89,7 @@ database, single sign-on - follow the deployment documentation:
 [Docker](https://www.freie-netze.org/wg-access-server/deployment/docker/),
 [Docker Compose](https://www.freie-netze.org/wg-access-server/deployment/docker-compose/) or
 [Raspberry Pi with Pi-hole](https://www.freie-netze.org/wg-access-server/deployment/raspberry-pi-pi-hole/).
-It also covers what to do when the kernel modules cannot be loaded, and how to keep the private key
+It also covers what to do when the iptables modules cannot be loaded, and how to keep the private key
 so that the devices you added keep working.
 
 ## Running on Kubernetes via Helm

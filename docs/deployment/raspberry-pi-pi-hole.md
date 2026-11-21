@@ -11,8 +11,9 @@ anybody else, and port 53 of the host stays free.
 ## Prerequisites
 
 - Docker with the Compose plugin
-- The WireGuard kernel module. Raspberry Pi OS Bookworm and newer ship it; check with
-  `sudo modprobe wireguard`. See [Docker](docker.md#modules) for loading it on boot.
+- The iptables kernel modules (`ip_tables`, `ip6_tables`). The AmneziaWG
+  dataplane runs in userspace and does not need the WireGuard module; see
+  [Docker](docker.md#modules) for loading the iptables modules on boot.
 - UDP port 51820 forwarded to the Raspberry Pi if clients connect from outside your network
 
 ## docker-compose.yml

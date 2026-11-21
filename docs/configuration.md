@@ -303,9 +303,12 @@ A client older than AmneziaWG 3.1 cannot talk to this server, and it fails
 silently, exactly like a wrong key: it does not recognise the packets. Check
 the client version before blaming the parameters.
 
-AmneziaWG has no kernel module. The server always uses its embedded userspace
+AmneziaWG also has a Linux kernel module (`amneziawg-dkms`), but it is a
+different device with its own netlink API (family `amneziawg`), and this fork
+has no backend for it yet. The server always uses its embedded userspace
 implementation, so `/dev/net/tun` and `NET_ADMIN` remain all a container needs -
-`SYS_MODULE` and `/lib/modules` are not required.
+`SYS_MODULE` and `/lib/modules` are not required. The userspace dataplane costs
+more CPU per packet than the kernel module; a kernel backend is planned.
 
 ## The Config File (config.yaml)
 
