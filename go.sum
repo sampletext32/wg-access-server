@@ -107,6 +107,8 @@ github.com/sampletext32/amneziawg-embed v0.2.1 h1:B+mfOkJNtI//tZk7GCaf2sSVgz+N4R
 github.com/sampletext32/amneziawg-embed v0.2.1/go.mod h1:lYsj68yB/7EK5wS45U1g9/hE19mhEhAJBAK6R5gPmN8=
 github.com/sampletext32/amneziawg-embed v0.3.0 h1:8Hqcn9heFW00BAfAbisbOYEUaZ75PVGiXXPhJFJiQ0k=
 github.com/sampletext32/amneziawg-embed v0.3.0/go.mod h1:lYsj68yB/7EK5wS45U1g9/hE19mhEhAJBAK6R5gPmN8=
+github.com/sampletext32/amneziawg-embed v0.4.0 h1:/64axukXDQu2309hsuRigRp1YWnpBAfy4+2t0fGoI5g=
+github.com/sampletext32/amneziawg-embed v0.4.0/go.mod h1:lYsj68yB/7EK5wS45U1g9/hE19mhEhAJBAK6R5gPmN8=
 github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
 github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

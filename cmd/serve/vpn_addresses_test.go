@@ -23,24 +23,24 @@ func TestVPNAddressesAddsTheProxyRouteOnlyWhenNeeded(t *testing.T) {
 	}{
 		{
 			name:         "the default route already covers the server address",
-			cidr:         "10.88.0.0/24",
+			cidr:         "10.13.0.0/24",
 			allowed:      []string{"0.0.0.0/0", "::/0"},
 			wantAllowed:  []string{"0.0.0.0/0", "::/0"},
-			wantPrefixes: []string{"10.88.0.1/24"},
+			wantPrefixes: []string{"10.13.0.1/24"},
 		},
 		{
 			name:         "a narrower route leaves the proxy unreachable",
-			cidr:         "10.88.0.0/24",
+			cidr:         "10.13.0.0/24",
 			allowed:      []string{"192.168.0.0/16"},
-			wantAllowed:  []string{"192.168.0.0/16", "10.88.0.1/32"},
-			wantPrefixes: []string{"10.88.0.1/24"},
+			wantAllowed:  []string{"192.168.0.0/16", "10.13.0.1/32"},
+			wantPrefixes: []string{"10.13.0.1/24"},
 		},
 		{
 			name:         "the address written out on its own is enough",
-			cidr:         "10.88.0.0/24",
-			allowed:      []string{"0.0.0.0/0", "10.88.0.1"},
-			wantAllowed:  []string{"0.0.0.0/0", "10.88.0.1"},
-			wantPrefixes: []string{"10.88.0.1/24"},
+			cidr:         "10.13.0.0/24",
+			allowed:      []string{"0.0.0.0/0", "10.13.0.1"},
+			wantAllowed:  []string{"0.0.0.0/0", "10.13.0.1"},
+			wantPrefixes: []string{"10.13.0.1/24"},
 		},
 	}
 

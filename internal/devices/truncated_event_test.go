@@ -87,7 +87,7 @@ func TestDeviceGetsAPeerFromANotificationWithoutItsRow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := openTruncatedTestStorage(t, uri)
 			wg := &recordingInterface{WireGuardInterface: wgembed.NewNoOpInterface(), peers: map[string]bool{}}
-			manager := New(wg, s, "10.88.0.0/16", "")
+			manager := New(wg, s, "10.13.0.0/16", "")
 			require.NoError(t, manager.StartSync(t.Context(), false, false, 0))
 
 			owner := fmt.Sprintf("truncated-event-test-%d", time.Now().UnixNano())
