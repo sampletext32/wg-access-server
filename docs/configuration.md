@@ -332,9 +332,10 @@ own format, not as a `.conf`:
   "Server 1".
 - **QR:** a short series of codes (two to four for the profiles here). The
   app's reader shows no progress while scanning and reacts only after the last
-  code, so the dialog numbers them and the user moves between them with Next or
-  the arrow keys. Each code is one 400-byte piece of the compressed document in
-  AmneziaVPN's chunk format (magic 1984, chunk count, index, length, data).
+  code, so the dialog numbers them and cycles through them every few seconds:
+  the phone only has to be pointed at the screen, no button has to be pressed.
+  Each code is one 400-byte piece of the compressed document in AmneziaVPN's
+  chunk format (magic 1984, chunk count, index, length, data).
 
 A server without an AmneziaWG profile still hands out a plain `.conf`, and a
 single QR code of its text, which WireGuard clients import.

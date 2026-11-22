@@ -8,8 +8,6 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { GetApp } from '@mui/icons-material';
-import ChevronLeft from '@mui/icons-material/ChevronLeft';
-import ChevronRight from '@mui/icons-material/ChevronRight';
 import Laptop from '@mui/icons-material/Laptop';
 import PhoneIphone from '@mui/icons-material/PhoneIphone';
 import React, { PropsWithChildren } from 'react';
@@ -37,8 +35,8 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
 
   // For AmneziaWG servers the connection is handed over in AmneziaVPN's own
   // format: a JSON document with a description and the endpoint, which is what
-  // makes the app show "vpn.example.com" instead of "Server 1". The QR code
-  // carries the same document as a vpn:// link.
+  // makes the app show "vpn.example.com" instead of "Server 1". The QR codes
+  // carry the same document in the app's chunked format.
   const native = React.useMemo(() => {
     if (!amnezia) {
       return undefined;
@@ -85,23 +83,16 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
     window.open(href, '__blank', 'noopener noreferrer');
   };
 
-  // A multi-code import is driven with the buttons or the arrow keys; the
-  // phone shows nothing until the last code has been read.
+  // The codes cycle in place: no interaction is needed, the phone just has to
+  // be pointed at the screen while the codes change.
   React.useEffect(() => {
     if (!qrCodes || qrCodes.length <= 1) {
       return;
     }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        setQrIndex((index) => Math.min(qrCodes.length - 1, index + 1));
-      } else if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        setQrIndex((index) => Math.max(0, index - 1));
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    const timer = window.setInterval(() => {
+      setQrIndex((index) => (index + 1) % qrCodes.length);
+    }, 3000);
+    return () => window.clearInterval(timer);
   }, [qrCodes]);
 
   const downloadConfigFile = () => {
@@ -206,25 +197,9 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
                         component="p"
                         sx={{ maxWidth: 460, textAlign: 'center', color: 'text.secondary' }}
                       >
-                        AmneziaVPN shows no progress while scanning. Point the phone at this code, then press Next (or
-                        the right arrow key) for the next one. The connection appears only after the last code.
+                        AmneziaVPN shows no progress while scanning. Point the phone at the screen and let it read the
+                        codes as they change; the connection appears after the last one.
                       </Typography>
-                      <ButtonGroup size="small" variant="outlined">
-                        <Button
-                          startIcon={<ChevronLeft />}
-                          disabled={qrIndex <= 0}
-                          onClick={() => setQrIndex((index) => Math.max(0, index - 1))}
-                        >
-                          Previous
-                        </Button>
-                        <Button
-                          endIcon={<ChevronRight />}
-                          disabled={qrIndex >= qrCodes.length - 1}
-                          onClick={() => setQrIndex((index) => Math.min(qrCodes.length - 1, index + 1))}
-                        >
-                          Next
-                        </Button>
-                      </ButtonGroup>
                     </>
                   ) : (
                     <Typography
