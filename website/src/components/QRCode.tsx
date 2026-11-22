@@ -11,12 +11,17 @@ export function QRCode(props: Props) {
 
   React.useEffect(() => {
     let current = true;
-    void qrcode.toDataURL(props.content).then((dataURL) => {
-      // the content may have changed while the code was being drawn
-      if (current) {
-        setUri(dataURL);
-      }
-    });
+    // The AmneziaVPN payload is a compressed document, but still long enough
+    // that the lowest error correction keeps the code readable at 250px; the
+    // larger bitmap keeps the modules sharp.
+    void qrcode
+      .toDataURL(props.content, { errorCorrectionLevel: 'L', margin: 1, width: 512 })
+      .then((dataURL) => {
+        // the content may have changed while the code was being drawn
+        if (current) {
+          setUri(dataURL);
+        }
+      });
     return () => {
       current = false;
     };

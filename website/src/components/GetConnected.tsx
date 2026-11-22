@@ -17,6 +17,7 @@ import { LinuxIcon } from './Icons';
 import AppleIcon from '@mui/icons-material/Apple';
 import MicrosoftIcon from '@mui/icons-material/Microsoft';
 import { isAmnezia } from './clientProduct';
+import { buildAmneziaNative, toVpnUri } from './amneziaNative';
 import { QRCode } from './QRCode';
 import { TabPanel } from './TabPanel';
 
@@ -31,12 +32,57 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
   // instructions have to name the client that can read it.
   const amnezia = isAmnezia(AppState.info);
 
+  // For AmneziaWG servers the connection is handed over in AmneziaVPN's own
+  // format: a JSON document with a description and the endpoint, which is what
+  // makes the app show "vpn.example.com" instead of "Server 1". The QR code
+  // carries the same document as a vpn:// link.
+  const native = React.useMemo(() => {
+    if (!amnezia) {
+      return undefined;
+    }
+    try {
+      return buildAmneziaNative(configFile, '');
+    } catch {
+      // A configuration the builder cannot read is still offered as the plain
+      // file rather than not at all.
+      return undefined;
+    }
+  }, [amnezia, configFile]);
+
+  const [qrContent, setQrContent] = React.useState(configFile);
+  React.useEffect(() => {
+    let current = true;
+    if (!native) {
+      setQrContent(configFile);
+      return;
+    }
+    // The importer also accepts the raw JSON, so this is valid while the
+    // compressed vpn:// form is still being built.
+    setQrContent(native.json);
+    void toVpnUri(native.json)
+      .then((uri) => {
+        if (current && uri) {
+          setQrContent(uri);
+        }
+      })
+      .catch(() => {
+        // keep the JSON form
+      });
+    return () => {
+      current = false;
+    };
+  }, [native, configFile]);
+
   const go = (href: string) => {
     window.open(href, '__blank', 'noopener noreferrer');
   };
 
   const downloadConfigFile = () => {
     const info = AppState.info!;
+    if (native) {
+      download({ filename: native.host + '.json', content: native.json });
+      return;
+    }
     download({
       filename: info.filename.length > 0 ? info.filename + '.conf' : amnezia ? 'AmneziaWG.conf' : 'WireGuard.conf',
       content: configFile,
@@ -64,7 +110,7 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
             <ListItem>
               <ListItemText
                 style={{ width: 300 }}
-                primary={amnezia ? '1. Install an AmneziaWG client' : '1. Install the WireGuard app'}
+                primary={amnezia ? '1. Install AmneziaVPN' : '1. Install the WireGuard app'}
               />
               {amnezia ? (
                 <Button variant="outlined" color="primary" onClick={() => go('https://storage.googleapis.com/amnezia/amnezia.org')}>
@@ -85,13 +131,19 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
               )}
             </ListItem>
             <ListItem>
-              <ListItemText style={{ width: 300 }} primary="2. Download your connection file" />
+              <ListItemText
+                style={{ width: 300 }}
+                primary={amnezia ? '2. Download your AmneziaVPN configuration (JSON)' : '2. Download your connection file'}
+              />
               <Button variant="outlined" color="primary" onClick={downloadConfigFile}>
-                <GetApp /> Connection file
+                <GetApp /> {amnezia ? 'Configuration' : 'Connection file'}
               </Button>
             </ListItem>
             <ListItem>
-              <ListItemText style={{ width: 300 }} primary="3. Import your connection file in the app" />
+              <ListItemText
+                style={{ width: 300 }}
+                primary={amnezia ? '3. Import the file in AmneziaVPN' : '3. Import your connection file in the app'}
+              />
             </ListItem>
           </List>
         </Box>
@@ -103,7 +155,7 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
             <Box>
               <List>
                 <ListItem>
-                  <ListItemText primary={amnezia ? '1. Install an AmneziaWG client' : '1. Install the WireGuard app'} />
+                  <ListItemText primary={amnezia ? '1. Install AmneziaVPN' : '1. Install the WireGuard app'} />
                 </ListItem>
                 <ListItem>
                   <ListItemText primary={amnezia ? '2. Add a connection' : '2. Add a tunnel'} />
@@ -114,7 +166,7 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
               </List>
             </Box>
             <Box>
-              <QRCode content={configFile} />
+              <QRCode content={qrContent} />
             </Box>
           </Box>
         </TabPanel>
