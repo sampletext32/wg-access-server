@@ -36,7 +36,7 @@ Since the upstream is currently unmaintained, we try to add new features and kee
 - PostgreSQL, MySQL or SQLite storage; several replicas can share PostgreSQL or MySQL
 - An [audit log](https://www.freie-netze.org/wg-access-server/audit/) and Prometheus [metrics](#metrics)
 - Commands to run when the WireGuard interface comes up or goes down
-- An embedded AmneziaWG userspace dataplane (the AmneziaWG kernel module is not supported by this fork yet)
+- An AmneziaWG dataplane: the node's `amneziawg` kernel module when it is available, otherwise an embedded userspace device
 - Dark and light mode, switched with the sun/moon button in the bar
 
 ## Documentation
@@ -56,7 +56,8 @@ Quick Links:
 ## Try it out
 
 Load the iptables kernel modules on the host, then start the container (the
-AmneziaWG dataplane runs in userspace, so no WireGuard kernel module is used):
+AmneziaWG dataplane uses the node's `amneziawg` kernel module when it is loaded
+and falls back to the embedded userspace device otherwise):
 
 ```bash
 modprobe ip_tables && modprobe ip6_tables

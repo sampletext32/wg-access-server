@@ -1,7 +1,9 @@
 # Docker
 
-Load the `ip_tables` and `ip6_tables` kernel modules on the host. The
-AmneziaWG dataplane runs in userspace and does not use the `wireguard` module.
+Load the `ip_tables` and `ip6_tables` kernel modules on the host. The AmneziaWG
+dataplane uses the node's `amneziawg` kernel module when it is loaded (netlink
+family version 3 or newer) and otherwise falls back to the embedded userspace
+device; it never uses the stock `wireguard` module.
 
 ```bash
 modprobe ip_tables && modprobe ip6_tables
@@ -34,9 +36,10 @@ If you are unable to load the `iptables` kernel modules, you can add the `SYS_MO
 
 This is not recommended as it essentially gives the container root privileges over the host system and an attacker could easily break out of the container.
 
-The AmneziaWG dataplane in this fork is userspace: it does not use the
-WireGuard kernel module, so there is nothing to load and no kernel-to-userspace
-fallback. `/dev/net/tun` and `NET_ADMIN` are what it needs.
+The AmneziaWG dataplane in this fork uses the node's `amneziawg` kernel module
+when it is loaded and falls back to the embedded userspace device otherwise. It
+never uses the stock WireGuard module, so there is nothing to load for it;
+`/dev/net/tun` and `NET_ADMIN` are what it needs.
 
 ## IPv6-only (without IPv4)
 

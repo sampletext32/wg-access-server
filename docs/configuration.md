@@ -303,12 +303,24 @@ A client older than AmneziaWG 3.1 cannot talk to this server, and it fails
 silently, exactly like a wrong key: it does not recognise the packets. Check
 the client version before blaming the parameters.
 
-AmneziaWG also has a Linux kernel module (`amneziawg-dkms`), but it is a
-different device with its own netlink API (family `amneziawg`), and this fork
-has no backend for it yet. The server always uses its embedded userspace
-implementation, so `/dev/net/tun` and `NET_ADMIN` remain all a container needs -
-`SYS_MODULE` and `/lib/modules` are not required. The userspace dataplane costs
-more CPU per packet than the kernel module; a kernel backend is planned.
+The server can use AmneziaWG's Linux kernel module (`amneziawg-dkms`) as its
+dataplane. On Linux it creates the module's own device (`type amneziawg`,
+netlink family `amneziawg`, version 3 or newer) and falls back to the embedded
+userspace implementation when the module is not installed, not loaded, too old
+or the link cannot be created. Both speak the same protocol; the fallback is
+logged once at startup as `dataplane: userspace (kernel device unavailable: …)`,
+and a successful kernel start as `dataplane: kernel (…)`. There is no
+configuration setting for this - like `wg-embed`, the server always tries the
+kernel device first.
+
+The module is a property of the node, not of the container: install it there
+(DKMS) and let the node load it. `/dev/net/tun` and `NET_ADMIN` are enough for
+the container in both cases; `SYS_MODULE` and `/lib/modules` are not required.
+The kernel dataplane does the crypto in-kernel, without a TUN copy, and is the
+cheaper of the two per packet.
+
+If the module is loaded but the server keeps falling back, the log line names
+the reason (for example an old module reporting netlink family version 2).
 
 ## The Config File (config.yaml)
 
