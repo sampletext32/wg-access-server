@@ -211,12 +211,15 @@ export async function toQrChunks(json: string): Promise<string[]> {
   const chunks: string[] = [];
   for (let index = 0; index < count; index++) {
     const part = framed.subarray(index * QR_CHUNK_SIZE, Math.min((index + 1) * QR_CHUNK_SIZE, framed.length));
-    const payload = new Uint8Array(4 + part.length);
+    // QDataStream writes a QByteArray with a four-byte big-endian length in
+    // front of the bytes, so the chunk is: magic, count, index, length, data.
+    const payload = new Uint8Array(8 + part.length);
     const header = new DataView(payload.buffer);
     header.setUint16(0, QR_MAGIC, false);
     payload[2] = count;
     payload[3] = index;
-    payload.set(part, 4);
+    header.setUint32(4, part.length, false);
+    payload.set(part, 8);
     chunks.push(base64Url(payload));
   }
   return chunks;
