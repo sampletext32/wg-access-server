@@ -6,6 +6,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import Typography from '@mui/material/Typography';
 import { GetApp } from '@mui/icons-material';
 import Laptop from '@mui/icons-material/Laptop';
 import PhoneIphone from '@mui/icons-material/PhoneIphone';
@@ -17,7 +18,7 @@ import { LinuxIcon } from './Icons';
 import AppleIcon from '@mui/icons-material/Apple';
 import MicrosoftIcon from '@mui/icons-material/Microsoft';
 import { isAmnezia } from './clientProduct';
-import { buildAmneziaNative, toVpnUri } from './amneziaNative';
+import { buildAmneziaNative, toQrChunks } from './amneziaNative';
 import { QRCode } from './QRCode';
 import { TabPanel } from './TabPanel';
 
@@ -49,24 +50,26 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
     }
   }, [amnezia, configFile]);
 
-  const [qrContent, setQrContent] = React.useState(configFile);
+  // AmneziaVPN scans a series of QR codes, each one a piece of the compressed
+  // document; a small document is a single code.
+  const [qrCodes, setQrCodes] = React.useState<string[] | undefined>(undefined);
   React.useEffect(() => {
     let current = true;
     if (!native) {
-      setQrContent(configFile);
+      setQrCodes([configFile]);
       return;
     }
-    // The importer also accepts the raw JSON, so this is valid while the
-    // compressed vpn:// form is still being built.
-    setQrContent(native.json);
-    void toVpnUri(native.json)
-      .then((uri) => {
-        if (current && uri) {
-          setQrContent(uri);
+    setQrCodes(undefined);
+    void toQrChunks(native.json)
+      .then((chunks) => {
+        if (current) {
+          setQrCodes(chunks.length > 0 ? chunks : [native.json]);
         }
       })
       .catch(() => {
-        // keep the JSON form
+        if (current) {
+          setQrCodes([native.json]);
+        }
       });
     return () => {
       current = false;
@@ -165,8 +168,17 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
                 </ListItem>
               </List>
             </Box>
-            <Box>
-              <QRCode content={qrContent} />
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', justifyContent: 'center' }}>
+              {qrCodes?.map((code, index) => (
+                <Box key={index} sx={{ textAlign: 'center' }}>
+                  <QRCode content={code} />
+                  {qrCodes.length > 1 && (
+                    <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
+                      QR code {index + 1} of {qrCodes.length}
+                    </Typography>
+                  )}
+                </Box>
+              ))}
             </Box>
           </Box>
         </TabPanel>

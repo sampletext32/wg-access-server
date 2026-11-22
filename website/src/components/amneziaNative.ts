@@ -174,22 +174,47 @@ function base64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// toVpnUri wraps the JSON the way AmneziaVPN shares it: base64url of
-// qCompress(), which is a four-byte big-endian uncompressed length followed by
-// a zlib stream. Browsers without CompressionStream get the plain JSON instead
-// (the importer accepts that too).
-export async function toVpnUri(json: string): Promise<string> {
+// qrChunkSize is the number of compressed bytes AmneziaVPN puts in one QR
+// code (client/core/utils/qrCodeUtils.cpp: k = 850).
+const QR_CHUNK_SIZE = 850;
+
+// qrMagicCode marks a QR code as one chunk of a multi-code config
+// (qrCodeUtils.h: qrMagicCode = 1984).
+const QR_MAGIC = 1984;
+
+// toQrChunks turns the JSON into the QR payloads AmneziaVPN scans: the JSON is
+// compressed the way qCompress does it (four-byte big-endian length + zlib),
+// split into 850-byte pieces, and each piece is prefixed with the magic code,
+// the number of pieces and its own index before base64url encoding. A document
+// that compresses small enough is a single code.
+//
+// Browsers without CompressionStream get no chunks; the caller falls back to
+// the raw JSON, which the importer also accepts.
+export async function toQrChunks(json: string): Promise<string[]> {
   if (typeof CompressionStream === 'undefined') {
-    return '';
+    return [];
   }
   const rawLength = new TextEncoder().encode(json).length;
   const compressed = await new Response(
     new Blob([json]).stream().pipeThrough(new CompressionStream('deflate')),
   ).arrayBuffer();
 
+  // qCompress framing: uncompressed length, big-endian, then a zlib stream.
   const framed = new Uint8Array(4 + compressed.byteLength);
   new DataView(framed.buffer).setUint32(0, rawLength, false);
   framed.set(new Uint8Array(compressed), 4);
 
-  return 'vpn://' + base64Url(framed);
+  const count = Math.ceil(framed.length / QR_CHUNK_SIZE);
+  const chunks: string[] = [];
+  for (let index = 0; index < count; index++) {
+    const part = framed.subarray(index * QR_CHUNK_SIZE, Math.min((index + 1) * QR_CHUNK_SIZE, framed.length));
+    const payload = new Uint8Array(4 + part.length);
+    const header = new DataView(payload.buffer);
+    header.setUint16(0, QR_MAGIC, false);
+    payload[2] = count;
+    payload[3] = index;
+    payload.set(part, 4);
+    chunks.push(base64Url(payload));
+  }
+  return chunks;
 }
