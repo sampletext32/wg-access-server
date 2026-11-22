@@ -37,6 +37,7 @@ Since the upstream is currently unmaintained, we try to add new features and kee
 - An [audit log](https://www.freie-netze.org/wg-access-server/audit/) and Prometheus [metrics](#metrics)
 - Commands to run when the WireGuard interface comes up or goes down
 - An AmneziaWG dataplane: the node's `amneziawg` kernel module when it is available, otherwise an embedded userspace device
+- AmneziaVPN-native client configurations: a named JSON file and a multi-code QR, instead of an unnamed `.conf`
 - Dark and light mode, switched with the sun/moon button in the bar
 
 ## Documentation

@@ -322,6 +322,23 @@ cheaper of the two per packet.
 If the module is loaded but the server keeps falling back, the log line names
 the reason (for example an old module reporting netlink family version 2).
 
+## The client configuration
+
+A server with an AmneziaWG profile hands its configuration over in AmneziaVPN's
+own format, not as a `.conf`:
+
+- **File:** `<externalHost>.json`, the document AmneziaVPN imports. It carries
+  the server name, so the app lists `vpn.example.com` instead of inventing
+  "Server 1".
+- **QR:** a short series of codes (two to four for the profiles here). The
+  app's reader shows no progress while scanning and reacts only after the last
+  code, so the dialog numbers them and the user moves between them with Next or
+  the arrow keys. Each code is one 400-byte piece of the compressed document in
+  AmneziaVPN's chunk format (magic 1984, chunk count, index, length, data).
+
+A server without an AmneziaWG profile still hands out a plain `.conf`, and a
+single QR code of its text, which WireGuard clients import.
+
 ## The Config File (config.yaml)
 
 Here's an example config file to get started with.
