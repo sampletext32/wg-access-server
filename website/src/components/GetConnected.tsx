@@ -91,7 +91,7 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
     }
     const timer = window.setInterval(() => {
       setQrIndex((index) => (index + 1) % qrCodes.length);
-    }, 3000);
+    }, 2000);
     return () => window.clearInterval(timer);
   }, [qrCodes]);
 
@@ -189,6 +189,30 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
                   <QRCode content={qrCodes[Math.min(qrIndex, qrCodes.length - 1)]} />
                   {qrCodes.length > 1 ? (
                     <>
+                      <Box
+                        aria-hidden
+                        sx={{
+                          width: 'min(512px, 78vw)',
+                          height: 6,
+                          bgcolor: 'action.disabledBackground',
+                          borderRadius: 3,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {/* keyed by the index so the animation restarts for every code */}
+                        <Box
+                          key={qrIndex}
+                          sx={{
+                            height: '100%',
+                            bgcolor: 'primary.main',
+                            animation: 'qrTimer 2000ms linear',
+                            '@keyframes qrTimer': {
+                              from: { width: '0%' },
+                              to: { width: '100%' },
+                            },
+                          }}
+                        />
+                      </Box>
                       <Typography variant="subtitle2" component="p" sx={{ fontWeight: 600 }}>
                         QR code {Math.min(qrIndex, qrCodes.length - 1) + 1} of {qrCodes.length}
                       </Typography>
