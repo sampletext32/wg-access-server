@@ -15,7 +15,7 @@ export function QRCode(props: Props) {
     // that the lowest error correction keeps the code readable at 250px; the
     // larger bitmap keeps the modules sharp.
     void qrcode
-      .toDataURL(props.content, { errorCorrectionLevel: 'L', margin: 2, width: 768 })
+      .toDataURL(props.content, { errorCorrectionLevel: 'L', margin: 2, width: 1024 })
       .then((dataURL) => {
         // the content may have changed while the code was being drawn
         if (current) {
@@ -50,8 +50,8 @@ export function QRCode(props: Props) {
         src={uri}
         style={{
           display: 'block',
-          width: '375px',
-          height: '375px',
+          width: 'min(512px, 78vw)',
+          aspectRatio: '1 / 1',
         }}
       />
     </Box>

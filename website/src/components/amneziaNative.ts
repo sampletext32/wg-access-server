@@ -174,9 +174,12 @@ function base64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// qrChunkSize is the number of compressed bytes AmneziaVPN puts in one QR
-// code (client/core/utils/qrCodeUtils.cpp: k = 850).
-const QR_CHUNK_SIZE = 850;
+// qrChunkSize is how many compressed bytes go into one QR code. AmneziaVPN
+// accepts up to 850 (its own exporter uses that), but at 850 the code has too
+// many modules for a phone camera pointed at a laptop screen; smaller pieces
+// give shorter, much easier to scan codes at the cost of one or two more of
+// them.
+const QR_CHUNK_SIZE = 400;
 
 // qrMagicCode marks a QR code as one chunk of a multi-code config
 // (qrCodeUtils.h: qrMagicCode = 1984).

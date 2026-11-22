@@ -53,13 +53,16 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
   // AmneziaVPN scans a series of QR codes, each one a piece of the compressed
   // document; a small document is a single code.
   const [qrCodes, setQrCodes] = React.useState<string[] | undefined>(undefined);
+  const [qrIndex, setQrIndex] = React.useState(0);
   React.useEffect(() => {
     let current = true;
     if (!native) {
       setQrCodes([configFile]);
+      setQrIndex(0);
       return;
     }
     setQrCodes(undefined);
+    setQrIndex(0);
     void toQrChunks(native.json)
       .then((chunks) => {
         if (current) {
@@ -168,17 +171,30 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
                 </ListItem>
               </List>
             </Box>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', justifyContent: 'center' }}>
-              {qrCodes?.map((code, index) => (
-                <Box key={index} sx={{ textAlign: 'center' }}>
-                  <QRCode content={code} />
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+              {qrCodes && qrCodes.length > 0 && (
+                <>
+                  <QRCode content={qrCodes[Math.min(qrIndex, qrCodes.length - 1)]} />
                   {qrCodes.length > 1 && (
-                    <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
-                      QR code {index + 1} of {qrCodes.length}
+                    <Typography variant="caption" component="p">
+                      QR code {Math.min(qrIndex, qrCodes.length - 1) + 1} of {qrCodes.length} — scan each, in any order
                     </Typography>
                   )}
-                </Box>
-              ))}
+                  {qrCodes.length > 1 && (
+                    <ButtonGroup size="small" variant="outlined">
+                      <Button disabled={qrIndex <= 0} onClick={() => setQrIndex((index) => Math.max(0, index - 1))}>
+                        Previous
+                      </Button>
+                      <Button
+                        disabled={qrIndex >= qrCodes.length - 1}
+                        onClick={() => setQrIndex((index) => Math.min(qrCodes.length - 1, index + 1))}
+                      >
+                        Next
+                      </Button>
+                    </ButtonGroup>
+                  )}
+                </>
+              )}
             </Box>
           </Box>
         </TabPanel>
