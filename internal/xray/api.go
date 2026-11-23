@@ -58,7 +58,7 @@ func (s *Server) addUser(id string) error {
 	}
 	defer func() { _ = os.Remove(path) }()
 
-	output, err := s.callAPI(context.Background(), "adu", path)
+	output, err := s.callAPI(s.context(), "adu", path)
 	if err != nil {
 		return err
 	}
@@ -67,11 +67,15 @@ func (s *Server) addUser(id string) error {
 }
 
 // removeUser deletes one user. Xray reports a user that is not there as an
-// error, which is not one for us: the desired state is reached either way.
+// error, which is not one for us: the desired state is reached either way. The
+// check is on the CLI's own message, so it is written as narrowly as the known
+// wording allows and the version is pinned in the Dockerfile - a change there
+// shows up as a failed removal, never as a silently ignored one.
 func (s *Server) removeUser(id string) error {
-	output, err := s.callAPI(context.Background(), "rmu", "-tag="+vlessTag, id)
+	output, err := s.callAPI(s.context(), "rmu", "-tag="+vlessTag, id)
 	if err != nil {
-		if strings.Contains(output, "not found") {
+		lower := strings.ToLower(output)
+		if strings.Contains(lower, "not found") || strings.Contains(lower, "not exist") || strings.Contains(lower, "no such") {
 			return nil
 		}
 		return err
@@ -96,7 +100,7 @@ func (s *Server) Stats() (map[string]Traffic, error) {
 	if !s.runningNow() {
 		return map[string]Traffic{}, nil
 	}
-	output, err := s.callAPI(context.Background(), "statsquery", "-pattern", "user>>>")
+	output, err := s.callAPI(s.context(), "statsquery", "-pattern", "user>>>")
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +143,7 @@ func parseStatName(name string) (id string, direction string, ok bool) {
 // question that needs the API to answer, so a failure here means the process is
 // down rather than that a user is missing.
 func (s *Server) Ping() error {
-	_, err := s.callAPI(context.Background(), "statsquery", "-pattern", "user>>>")
+	_, err := s.callAPI(s.context(), "statsquery", "-pattern", "user>>>")
 	return err
 }
 

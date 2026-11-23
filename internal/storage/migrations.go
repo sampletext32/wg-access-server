@@ -193,9 +193,14 @@ var migrations = []migration{
 		// devices that existed before there was a second protocol: a device
 		// that has a peer but no UUID could use only one of the two, and
 		// "some devices are half-configured" is a state nobody wants to
-		// explain. The values are generated here rather than left empty, so
-		// that a missing UUID never becomes a legal state that the dataplane
-		// code has to defend against.
+		// explain.
+		//
+		// The column is added nullable, because a NOT NULL column cannot be
+		// added to a table that already has rows without a default, and a
+		// default would be a single UUID shared by every row. Existing rows
+		// are backfilled here; every new device gets one at creation. The
+		// dataplane still treats an empty value as "no user" rather than
+		// assuming it cannot happen.
 		id: "0016_device_vless_id",
 		apply: func(db *gorm.DB) error {
 			if err := db.AutoMigrate(&deviceV5{}); err != nil {

@@ -347,8 +347,8 @@ func (x *InfoRes) GetVless() *VLESSClientConfig {
 //
 // public_key is the REALITY public key derived from the server's private one;
 // a client that does not have it cannot complete the handshake. short_id and
-// server_name are the same for everybody, and fingerprint and alpn only shape
-// the client's own handshake.
+// server_name are the same for everybody, and fingerprint only shapes the
+// client's own handshake.
 type VLESSClientConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
@@ -358,7 +358,6 @@ type VLESSClientConfig struct {
 	ServerName    string                 `protobuf:"bytes,5,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	Flow          string                 `protobuf:"bytes,6,opt,name=flow,proto3" json:"flow,omitempty"`
 	Fingerprint   string                 `protobuf:"bytes,7,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
-	Alpn          []string               `protobuf:"bytes,8,rep,name=alpn,proto3" json:"alpn,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -440,13 +439,6 @@ func (x *VLESSClientConfig) GetFingerprint() string {
 		return x.Fingerprint
 	}
 	return ""
-}
-
-func (x *VLESSClientConfig) GetAlpn() []string {
-	if x != nil {
-		return x.Alpn
-	}
-	return nil
 }
 
 // AmneziaClientConfig is what a client needs to talk to an AmneziaWG server:
@@ -731,7 +723,7 @@ const file_server_proto_rawDesc = "" +
 	"\x11user_display_name\x18\x1a \x01(\tR\x0fuserDisplayName\x12#\n" +
 	"\ruser_provider\x18\x1b \x01(\tR\fuserProvider\x124\n" +
 	"\aamnezia\x18\x1c \x01(\v2\x1a.proto.AmneziaClientConfigR\aamnezia\x12.\n" +
-	"\x05vless\x18\x1d \x01(\v2\x18.proto.VLESSClientConfigR\x05vlessJ\x04\b\x04\x10\x05R\vhost_vpn_ip\"\xe0\x01\n" +
+	"\x05vless\x18\x1d \x01(\v2\x18.proto.VLESSClientConfigR\x05vlessJ\x04\b\x04\x10\x05R\vhost_vpn_ip\"\xd8\x01\n" +
 	"\x11VLESSClientConfig\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1d\n" +
@@ -741,8 +733,7 @@ const file_server_proto_rawDesc = "" +
 	"\vserver_name\x18\x05 \x01(\tR\n" +
 	"serverName\x12\x12\n" +
 	"\x04flow\x18\x06 \x01(\tR\x04flow\x12 \n" +
-	"\vfingerprint\x18\a \x01(\tR\vfingerprint\x12\x12\n" +
-	"\x04alpn\x18\b \x03(\tR\x04alpn\"\xbb\x05\n" +
+	"\vfingerprint\x18\a \x01(\tR\vfingerprintJ\x04\b\b\x10\tR\x04alpn\"\xbb\x05\n" +
 	"\x13AmneziaClientConfig\x12\x0e\n" +
 	"\x02jc\x18\x01 \x01(\rR\x02jc\x12\x12\n" +
 	"\x04jmin\x18\x02 \x01(\rR\x04jmin\x12\x12\n" +

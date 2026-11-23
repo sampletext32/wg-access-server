@@ -163,7 +163,6 @@ export interface AmneziaClientVless {
   serverName: string;
   flow: string;
   fingerprint: string;
-  alpn: string[];
 }
 
 // buildVlessLastConfig is the client half of the VLESS connection: a socks
@@ -171,7 +170,8 @@ export interface AmneziaClientVless {
 // app stores it as a string, exactly like the AmneziaWG one.
 export function buildVlessLastConfig(vless: AmneziaClientVless, id: string): string {
   const user: Record<string, unknown> = { id, encryption: 'none' };
-  // An empty flow is legal and means plain VLESS; the app omits it then.
+  // The server always configures a flow; the guard keeps a hand-built
+  // configuration without one valid rather than writing an empty setting.
   if (vless.flow) {
     user.flow = vless.flow;
   }
@@ -181,11 +181,9 @@ export function buildVlessLastConfig(vless: AmneziaClientVless, id: string): str
     streamSettings: {
       network: 'tcp',
       security: 'reality',
-      // No tlsSettings here: REALITY takes its parameters from this block,
-      // and the app's own REALITY configurations carry no ALPN either. The
-      // server's alpn value shapes the handshake the server accepts; writing
-      // it into the client document would advertise a protocol REALITY does
-      // not negotiate through tlsSettings.
+      // No tlsSettings here: REALITY takes its parameters from this block, and
+      // the ALPN is negotiated with the cover site during the handshake rather
+      // than configured on the client.
       realitySettings: {
         serverName: vless.serverName,
         fingerprint: vless.fingerprint,
@@ -218,7 +216,6 @@ export function vlessFromInfo(info: InfoRes.AsObject | undefined): AmneziaClient
     serverName: vless.serverName,
     flow: vless.flow,
     fingerprint: vless.fingerprint,
-    alpn: vless.alpn ?? [],
   };
 }
 

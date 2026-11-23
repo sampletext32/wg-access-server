@@ -339,32 +339,31 @@ vless:
   enabled: true
   listenPort: 10443          # inside the container; the service publishes 443
   apiPort: 10085             # loopback management API
-  publicHost: vless.example.com   # what clients dial, i.e. the DNS name
+  publicHost: vless.example.com   # the name people see; dialled unless publicIP is set
+  publicIP: ""               # optional: the address clients dial (mobile clients need it)
   publicPort: 443
   coverHost: www.example.com      # what the server pretends to be (the SNI)
   shortId: "106349f5e72cdab8"
   flow: xtls-rprx-vision
   fingerprint: firefox
-  alpn:
-    - h2
-  server:
-    realityPrivateKey: "<xray x25519 private key>"
+  realityPrivateKey: "<xray x25519 private key>"
 ```
 
 | Field | Meaning |
 |---|---|
-| `publicHost` | the name a client resolves and connects to. It is **not** the cover host |
+| `publicHost` | the name people see for the server; it is **not** the cover host. One of `publicHost`/`publicIP` must be set |
+| `publicIP` | the address clients actually dial, when set. Mobile clients start Xray *inside* the tunnel, so they cannot resolve the server's name to build it; leave `publicHost` as the display name |
 | `publicPort` | the port a client connects to, normally 443 |
 | `coverHost` | a real HTTPS site the server impersonates: the client sends it as the SNI, and an unauthenticated handshake is relayed to it, so a prober sees that site's own certificate |
-| `shortId`, `server.realityPrivateKey` | the REALITY identity. The public key is derived from the private one, so only the private one is configured. Changing either invalidates every configuration that was handed out |
-| `flow` | `xtls-rprx-vision` (the default) or empty |
-| `fingerprint`, `alpn` | what the client presents; they shape the handshake, not the server |
+| `shortId`, `realityPrivateKey` | the REALITY identity. The public key is derived from the private one, so only the private one is configured. Changing either invalidates every configuration that was handed out |
+| `flow` | `xtls-rprx-vision` (the default). REALITY needs a flow, so it is never empty while enabled |
+| `fingerprint` | the uTLS fingerprint the client presents; it shapes the handshake, not the server |
 
 Generate the key pair with `xray x25519` and keep the private half in a secret
 (`WG_VLESS_REALITY_PRIVATE_KEY_FILE`, as for the WireGuard key). The server
 refuses to start with a key that does not decode, a cover host that equals the
-public one, or a short id that is not hexadecimal: each of those produces
-configurations that simply do not connect.
+public one, a short id that is not hexadecimal, or neither `publicHost` nor
+`publicIP` set: each of those produces configurations that simply do not connect.
 
 ### Reaching it behind a proxy
 

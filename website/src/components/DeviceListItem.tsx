@@ -169,6 +169,7 @@ export const DeviceListItem = observer(function DeviceListItem({ device, onChang
           'Pre-shared key',
           device.presharedKey ? <PopoverDisplay label="Show">{device.presharedKey}</PopoverDisplay> : 'None',
         ] as Row,
+        ['VLESS id', device.vlessId ? <PopoverDisplay label="Show">{device.vlessId}</PopoverDisplay> : 'None'] as Row,
       ]}
       dialog={
         newConfig && (

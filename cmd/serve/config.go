@@ -193,7 +193,7 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 		logrus.Fatalf("invalid VLESS configuration: %v", err)
 	}
 	if cmd.AppConfig.VLESS.Enabled && cmd.AppConfig.VLESS.PublicHost == "" {
-		logrus.Warn("vless.publicHost is not set: client configurations will name the address the panel was opened from, which is not necessarily where clients can reach the VLESS port")
+		logrus.Warn("vless.publicHost is not set: client configurations dial vless.publicIP and show that address. Set publicHost to the name you want people to see")
 	}
 
 	firewall, err := network.ResolveFirewall(cmd.AppConfig.VPN.Firewall, cmd.AppConfig.VPN.DisableIPTables)

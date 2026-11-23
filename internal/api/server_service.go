@@ -198,10 +198,8 @@ func vlessClientConfig(conf *config.AppConfig) *proto.VLESSClientConfig {
 	// DialAddress rather than PublicHost: the mobile clients start their local
 	// Xray inside the tunnel it just created, so a name would have to be
 	// resolved with the DNS servers of a connection that does not exist yet.
+	// Validation guarantees that one of publicHost/publicIP is set.
 	host := conf.VLESS.DialAddress()
-	if host == "" {
-		host = conf.ExternalHost
-	}
 	publicKey := conf.VLESS.PublicKey()
 	if host == "" || publicKey == "" {
 		return nil
@@ -214,6 +212,5 @@ func vlessClientConfig(conf *config.AppConfig) *proto.VLESSClientConfig {
 		ServerName:  conf.VLESS.ServerName(),
 		Flow:        conf.VLESS.Flow,
 		Fingerprint: conf.VLESS.Fingerprint,
-		Alpn:        conf.VLESS.ALPN,
 	}
 }

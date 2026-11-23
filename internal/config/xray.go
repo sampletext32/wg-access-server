@@ -17,9 +17,8 @@ const (
 	DefaultVLESSListenPort = 10443
 	DefaultVLESSAPIPort    = 10085
 	// DefaultVLESSFlow is what Xray calls its Vision flow, the one AmneziaVPN
-	// uses for a REALITY server. An empty flow is allowed (plain VLESS), but
-	// Vision is what makes the connection behave like the TLS stream it
-	// pretends to be.
+	// uses for a REALITY server. It is what makes the connection behave like
+	// the TLS stream it pretends to be.
 	DefaultVLESSFlow        = "xtls-rprx-vision"
 	DefaultVLESSFingerprint = "firefox"
 	// DefaultVLESSLogLevel is quiet enough for production and still reports a
@@ -58,12 +57,13 @@ type VLESSConfig struct {
 	// users are added and removed without restarting the process, and how
 	// their traffic is read.
 	APIPort int `yaml:"apiPort"`
-	// PublicHost is the address clients put in their configuration. It is
-	// the name in DNS, not the cover host: clients resolve it to this server
-	// and then present the cover host as the SNI.
+	// PublicHost is the name clients show for this server. It is the name in
+	// DNS, not the cover host: clients resolve it to this server and then
+	// present the cover host as the SNI. When PublicIP is empty, this is also
+	// what client configurations dial.
 	//
-	// It is also the name a person reads, which is why it stays a name even
-	// when PublicIP is set.
+	// It is the name a person reads, which is why it stays a name even when
+	// PublicIP is set. Either this or PublicIP has to be set.
 	PublicHost string `yaml:"publicHost"`
 	// PublicIP is what client configurations actually dial, when it is set.
 	//
@@ -89,14 +89,12 @@ type VLESSConfig struct {
 	// secret, it is in every client configuration, but it has to be stable:
 	// changing it invalidates every configuration that was handed out.
 	ShortID string `yaml:"shortId"`
-	// Flow is the VLESS flow, empty for none.
+	// Flow is the VLESS flow. It defaults to DefaultVLESSFlow; REALITY needs a
+	// flow, so it is never empty while the server is enabled.
 	Flow string `yaml:"flow"`
 	// Fingerprint is the uTLS fingerprint the client presents. It lives here
 	// because it is part of the client configuration, not of the server.
 	Fingerprint string `yaml:"fingerprint"`
-	// ALPN is offered by the server in the TLS handshake, and in the client
-	// configuration.
-	ALPN []string `yaml:"alpn"`
 	// LogLevel is what the Xray process writes to its own log. Warning is
 	// enough to see failures; info also names every accepted connection,
 	// which is what tells "the client never dialled" apart from "the client
@@ -143,6 +141,9 @@ func (c *VLESSConfig) Validate() error {
 			return fmt.Errorf("vless.publicIP must be the address clients reach, got %q", c.PublicIP)
 		}
 	}
+	if c.PublicHost == "" && c.PublicIP == "" {
+		return fmt.Errorf("vless.publicHost or vless.publicIP is required: one of them is what client configurations dial")
+	}
 	if err := validateHostName("vless.coverHost", c.CoverHost, false); err != nil {
 		return err
 	}
@@ -166,9 +167,6 @@ func (c *VLESSConfig) Validate() error {
 	}
 	if c.Fingerprint == "" {
 		c.Fingerprint = DefaultVLESSFingerprint
-	}
-	if len(c.ALPN) == 0 {
-		c.ALPN = []string{"h2"}
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = DefaultVLESSLogLevel

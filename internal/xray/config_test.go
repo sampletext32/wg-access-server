@@ -19,7 +19,6 @@ func testConfig() config.VLESSConfig {
 		ShortID:           "106349f5e72cdab8",
 		Flow:              config.DefaultVLESSFlow,
 		Fingerprint:       config.DefaultVLESSFingerprint,
-		ALPN:              []string{"h2"},
 	}
 }
 
@@ -139,6 +138,19 @@ func TestParseStatName(t *testing.T) {
 	for _, name := range []string{"", "user>>>abc", "inbound>>>abc>>>traffic>>>uplink", "user>>>abc>>>traffic"} {
 		if _, _, ok := parseStatName(name); ok {
 			t.Errorf("%q was accepted", name)
+		}
+	}
+}
+
+// Only a UUID reaches the file name the API fragment is written to: an id with
+// a path separator in it would be a file escape, not just a missing user.
+func TestValidateUserID(t *testing.T) {
+	if err := validateUserID("7f5e6a4e-0c5b-4a5e-9f0a-1b2c3d4e5f60"); err != nil {
+		t.Errorf("a UUID was refused: %v", err)
+	}
+	for _, id := range []string{"", "device-uuid", "../../etc/passwd"} {
+		if err := validateUserID(id); err == nil {
+			t.Errorf("%q was accepted", id)
 		}
 	}
 }

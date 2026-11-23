@@ -66,6 +66,9 @@ func TestVLESSValidationRefusesBrokenProfiles(t *testing.T) {
 		"short id is too long":   func(c *VLESSConfig) { c.ShortID = strings.Repeat("ab", 9) },
 		"unknown flow":           func(c *VLESSConfig) { c.Flow = "xtls-rprx-something" },
 		"ports collide":          func(c *VLESSConfig) { c.ListenPort, c.APIPort = 9999, 9999 },
+		// Nothing clients could dial: a configuration with no address is one
+		// nobody can import, so it is refused at startup rather than exported.
+		"no address to dial": func(c *VLESSConfig) { c.PublicHost, c.PublicIP = "", "" },
 	}
 
 	for name, breakIt := range cases {

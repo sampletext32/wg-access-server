@@ -45,7 +45,13 @@ type Server struct {
 	cmd     *exec.Cmd
 	running bool
 	closed  bool
-	ctx     context.Context
+	// ctx is the lifetime of the supervisor and of the process it starts. It
+	// is derived from the context Start is given and cancelled by Close, so
+	// the supervisor cannot outlive the server or start a process after it
+	// has been closed - no matter in which order the caller shuts things
+	// down.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // New prepares the process without starting it. The directory it works in holds
@@ -69,13 +75,14 @@ func New(cfg config.VLESSConfig) (*Server, error) {
 // The supervisor takes over from there and restarts it if it exits.
 func (s *Server) Start(ctx context.Context) error {
 	s.mu.Lock()
-	s.ctx = ctx
+	s.ctx, s.cancel = context.WithCancel(ctx)
+	processCtx := s.ctx
 	s.mu.Unlock()
 
 	if err := writeConfig(s.configPath, s.cfg, s.users.list()); err != nil {
 		return err
 	}
-	if err := s.startProcess(ctx); err != nil {
+	if err := s.startProcess(processCtx); err != nil {
 		return err
 	}
 	if err := s.waitReady(); err != nil {
@@ -168,6 +175,24 @@ func (s *Server) waitReady() error {
 	}
 }
 
+// context returns the lifetime of the process, background for a server that
+// has not been started yet. It is what the management calls and the supervisor
+// use, so shutting the server down interrupts them all.
+func (s *Server) context() context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ctx == nil {
+		return context.Background()
+	}
+	return s.ctx
+}
+
+func (s *Server) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
+
 // supervise restarts the process when it exits, with a growing delay so that a
 // configuration it rejects does not turn into a busy loop. The users are
 // rendered again on every start, so a restart does not lose them.
@@ -175,8 +200,9 @@ func (s *Server) supervise() {
 	for {
 		s.mu.Lock()
 		cmd := s.cmd
+		ctx := s.ctx
 		s.mu.Unlock()
-		if cmd == nil {
+		if cmd == nil || ctx == nil {
 			return
 		}
 
@@ -197,7 +223,13 @@ func (s *Server) supervise() {
 
 		select {
 		case <-time.After(delay):
-		case <-s.ctx.Done():
+		case <-ctx.Done():
+			return
+		}
+
+		// Close may have run while we waited; a process started now would be
+		// an orphan nobody stops.
+		if s.isClosed() {
 			return
 		}
 
@@ -205,7 +237,7 @@ func (s *Server) supervise() {
 			logrus.Errorf("failed to rewrite the Xray configuration: %v", err)
 			continue
 		}
-		if err := s.startProcess(s.ctx); err != nil {
+		if err := s.startProcess(ctx); err != nil {
 			logrus.Errorf("failed to restart the Xray process: %v", err)
 			continue
 		}
@@ -244,7 +276,9 @@ func (s *Server) stopProcess() error {
 	return nil
 }
 
-// Close stops the process and removes its directory.
+// Close stops the process and removes its directory. It cancels the supervisor
+// first, so a process that is between restarts is not started again just after
+// the server decided to stop.
 func (s *Server) Close() error {
 	s.mu.Lock()
 	if s.closed {
@@ -252,8 +286,12 @@ func (s *Server) Close() error {
 		return nil
 	}
 	s.closed = true
+	cancel := s.cancel
 	s.mu.Unlock()
 
+	if cancel != nil {
+		cancel()
+	}
 	if err := s.stopProcess(); err != nil {
 		return err
 	}

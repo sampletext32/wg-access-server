@@ -86,10 +86,10 @@ type streamSettings struct {
 
 // realitySettings is the disguise: the server answers a client that proves it
 // knows the key, and hands everybody else to Dest, which is the cover site.
+// Only the fields this server actually sets are here: Xray's own defaults are
+// right for the rest (`show` off, `xver` off, no client version window).
 type realitySettings struct {
-	Show        bool     `json:"show"`
 	Dest        string   `json:"dest"`
-	Xver        int      `json:"xver"`
 	ServerNames []string `json:"serverNames"`
 	PrivateKey  string   `json:"privateKey"`
 	ShortIDs    []string `json:"shortIds"`
@@ -111,11 +111,8 @@ type outbound struct {
 }
 
 // outboundSettings carries the rules the freedom outbound applies just before
-// it dials. They exist because of a default Xray has since v26: traffic from a
-// VLESS inbound may not reach private or reserved addresses unless a rule
-// allows it. That is the right default - a VPN user should not be able to reach
-// the cluster the server runs in - but the DNS resolvers this server hands to
-// its clients are private addresses, so exactly those have to be allowed.
+// it dials. They are here to lift the private-address restriction Xray added in
+// v26; freedomOutbound explains why this server wants it lifted.
 type outboundSettings struct {
 	FinalRules []finalRule `json:"finalRules,omitempty"`
 }
@@ -227,15 +224,13 @@ func userFragment(cfg config.VLESSConfig, id string) ([]byte, error) {
 
 // freedomOutbound is the outbound every proxied connection uses.
 //
-// The unconditional allow rule is there because of a default Xray has since
-// v26: traffic from a VLESS inbound may not reach private or reserved addresses
-// unless a rule allows it. That default protects a server whose proxy is
-// exposed to strangers; it is wrong here. This server's WireGuard dataplane
-// forwards whatever the configuration allows - 0.0.0.0/0 means every address,
-// the cluster's and the tunnel's own included - and a second protocol that
-// quietly refuses a part of the same address space behaves unlike the first for
-// no reason a user could discover. The rule has no conditions, which is Xray's
-// documented way of switching the policy off.
+// Since v26 Xray refuses private and reserved targets from a VLESS inbound
+// unless a rule allows them. That default is right for a proxy exposed to
+// strangers and wrong here: the WireGuard side forwards whatever the
+// configuration allows (`0.0.0.0/0` is every address, the tunnel's resolver and
+// the cluster included), and the second protocol has to behave the same. A rule
+// with no conditions is Xray's documented way of switching the policy off; see
+// docs/configuration.md for the user-facing consequence.
 func freedomOutbound() outbound {
 	return outbound{
 		Protocol: "freedom",

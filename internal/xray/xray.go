@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Traffic is one user's counters, as the server last read them. They are
@@ -22,47 +24,6 @@ type Traffic struct {
 	Uplink   int64
 	Downlink int64
 }
-
-// User is one client of the VLESS inbound. The id is the device's VLESS id,
-// which is also the address the counters are keyed by.
-type User struct {
-	ID string
-}
-
-// Dataplane is what the rest of the server needs from the second protocol: a
-// user per device, counters per user, and a way to say whether it is alive.
-//
-// A no-op implementation is what a server with VLESS disabled runs, so the
-// device manager never has to ask whether the feature is on.
-type Dataplane interface {
-	// Upsert makes sure the user exists. It is idempotent: calling it for a
-	// user that is already there changes nothing.
-	Upsert(id string) error
-	// Remove deletes the user. Removing one that is not there is not an
-	// error, for the same reason as in the WireGuard dataplane: the caller
-	// applies a state, it does not describe a transition.
-	Remove(id string) error
-	// Stats returns the counters of every user the process knows, keyed by
-	// the user id.
-	Stats() (map[string]Traffic, error)
-	// Ping reports whether the process answers.
-	Ping() error
-}
-
-// disabled is the dataplane of a server that does not serve VLESS.
-type disabled struct{}
-
-// NewDisabled returns a dataplane that does nothing and is always alive.
-func NewDisabled() Dataplane {
-	return disabled{}
-}
-
-func (disabled) Upsert(string) error { return nil }
-func (disabled) Remove(string) error { return nil }
-func (disabled) Stats() (map[string]Traffic, error) {
-	return map[string]Traffic{}, nil
-}
-func (disabled) Ping() error { return nil }
 
 // backoff is how long the supervisor waits before starting the process again,
 // doubling up to the maximum. A process that crashes on every start would
@@ -134,12 +95,17 @@ func (u *users) list() []string {
 	return ids
 }
 
-// validateUserID refuses an empty id early: everything downstream - the
-// configuration, the API call, the counter key - would otherwise carry it, and
-// a user that cannot be removed is worse than a device that cannot be added.
+// validateUserID refuses an id that could not have come from this server. The
+// id becomes a file name (the API reads a fragment written next to the
+// configuration) and a counter key, so it is checked against the UUID the
+// device manager generates rather than only against emptiness: a path
+// separator here would be a file escape, not just a missing user.
 func validateUserID(id string) error {
 	if id == "" {
 		return fmt.Errorf("a VLESS user id is empty")
+	}
+	if _, err := uuid.Parse(id); err != nil {
+		return fmt.Errorf("a VLESS user id is not a UUID: %q", id)
 	}
 	return nil
 }

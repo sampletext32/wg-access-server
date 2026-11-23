@@ -81,9 +81,14 @@ message InfoRes {
 //
 // public_key is the REALITY public key derived from the server's private one;
 // a client that does not have it cannot complete the handshake. short_id and
-// server_name are the same for everybody, and fingerprint and alpn only shape
-// the client's own handshake.
+// server_name are the same for everybody, and fingerprint only shapes the
+// client's own handshake.
 message VLESSClientConfig {
+  // 8 was alpn. REALITY negotiates ALPN with the cover site, so it never
+  // reached a client configuration and is not part of the contract.
+  reserved 8;
+  reserved "alpn";
+
   string host = 1;
   int32 port = 2;
   string public_key = 3;
@@ -91,7 +96,6 @@ message VLESSClientConfig {
   string server_name = 5;
   string flow = 6;
   string fingerprint = 7;
-  repeated string alpn = 8;
 }
 
 // AmneziaClientConfig is what a client needs to talk to an AmneziaWG server:

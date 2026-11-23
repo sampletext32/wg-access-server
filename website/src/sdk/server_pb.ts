@@ -665,14 +665,13 @@ export declare namespace VLESSClientConfig {
 		serverName: string,
 		flow: string,
 		fingerprint: string,
-		alpn: Array<string>,
 	}
 }
 
 export class VLESSClientConfig extends jspb.Message {
 
 	private static repeatedFields_ = [
-		8,
+		
 	];
 
 	constructor(data?: jspb.Message.MessageArray) {
@@ -730,17 +729,6 @@ export class VLESSClientConfig extends jspb.Message {
 		(jspb.Message as any).setProto3StringField(this, 7, value);
 	}
 
-	getAlpn(): Array<string> {return jspb.Message.getFieldWithDefault(this, 8, [""]);
-	}
-
-	setAlpn(value: Array<string>): void {
-		(jspb.Message as any).setProto3StringField(this, 8, value);
-	}
-
-	addAlpn(value: string, index?: number): void {
-		return jspb.Message.addToRepeatedField(this, 8, value, index);
-	}
-
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		VLESSClientConfig.serializeBinaryToWriter(this, writer);
@@ -757,7 +745,6 @@ export class VLESSClientConfig extends jspb.Message {
 			serverName: this.getServerName(),
 			flow: this.getFlow(),
 			fingerprint: this.getFingerprint(),
-			alpn: this.getAlpn(),
 		};
 	}
 
@@ -789,10 +776,6 @@ export class VLESSClientConfig extends jspb.Message {
 		const field7 = message.getFingerprint();
 		if (field7.length > 0) {
 			writer.writeString(7, field7);
-		}
-		const field8 = message.getAlpn();
-		if (field8.length > 0) {
-			writer.writeRepeatedString(8, field8);
 		}
 	}
 
@@ -836,10 +819,6 @@ export class VLESSClientConfig extends jspb.Message {
 			case 7:
 				const field7 = reader.readString()
 				message.setFingerprint(field7);
-				break;
-			case 8:
-				const field8 = reader.readString()
-				message.addAlpn(field8);
 				break;
 			default:
 				reader.skipField();
@@ -1449,8 +1428,6 @@ function VLESSClientConfigFromObject(obj: VLESSClientConfig.AsObject | undefined
 	message.setServerName(obj.serverName);
 	message.setFlow(obj.flow);
 	message.setFingerprint(obj.fingerprint);
-	(obj.alpn || [])
-		.forEach((item) => message.addAlpn(item));
 	return message;
 }
 
