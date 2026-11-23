@@ -96,6 +96,10 @@ type AppConfig struct {
 	// Configure AmneziaWG. An empty section means the server speaks plain
 	// WireGuard, which is detectable; see the AmneziaWG documentation.
 	Amnezia AmneziaConfig `yaml:"amnezia"`
+	// Configure the second protocol, VLESS over REALITY. It is off unless
+	// enabled, and it runs next to the WireGuard interface rather than
+	// instead of it: every device gets a credential for both.
+	VLESS VLESSConfig `yaml:"vless"`
 	// Configure VPN related settings (networking)
 	VPN VPNConfig `yaml:"vpn"`
 	// Configure the embedded DNS server

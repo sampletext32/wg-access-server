@@ -55,9 +55,23 @@ func (cmd *servecmd) Run() {
 	defer storageBackend.Close()
 
 	// Device manager
+	//
+	// The second protocol, VLESS, is prepared here and started after the
+	// initial sync below: the device manager fills it with the devices that
+	// already exist, so the process reads one configuration that is complete
+	// instead of being told about every device one call at a time.
+	vless, stopVLESS := newVLESS(conf)
+	defer stopVLESS()
+
+	var proxy devices.ProxyDataplane = disabledProxy{}
+	if vless != nil {
+		proxy = vlessDataplane{server: vless}
+	}
+
 	deviceManager := devices.New(wg, storageBackend, conf.VPN.CIDR, conf.VPN.CIDRv6,
 		devices.WithMaxDevicesPerUser(conf.MaxDevicesPerUser),
-		devices.WithFirewallSync(firewallSync(conf, vpn)))
+		devices.WithFirewallSync(firewallSync(conf, vpn)),
+		devices.WithProxyDataplane(proxy))
 
 	stopDNS, err := startDNS(conf, deviceManager, storageBackend, vpn)
 	defer stopDNS()
@@ -74,6 +88,17 @@ func (cmd *servecmd) Run() {
 	if err := deviceManager.StartSync(backgroundCtx, conf.EnableMetadata, conf.EnableInactiveDeviceDeletion, conf.InactiveDeviceGracePeriod); err != nil {
 		logrus.Error(fmt.Errorf("failed to sync: %w", err))
 		return
+	}
+
+	// Only now is the list of devices known, so only now can the VLESS
+	// process be started with all of them in its configuration. A failure is
+	// logged and not fatal: the WireGuard interface is up and serving, and
+	// taking that down because the second protocol could not start would
+	// remove a working VPN for a feature nobody may be using yet.
+	if vless != nil {
+		if err := vless.Start(backgroundCtx); err != nil {
+			logrus.Error(fmt.Errorf("failed to start VLESS; it will not be available until the server is restarted: %w", err))
+		}
 	}
 
 	// The browser sessions: the cookie carries an id, who signed in is kept

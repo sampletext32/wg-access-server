@@ -27,6 +27,22 @@ RUN echo "Using: Version: ${VERSION}, Commit: ${COMMIT}"
 RUN go generate buildinfo/buildinfo.go
 RUN go build -o wg-access-server
 
+### Xray-core, the second dataplane
+#
+# Fetched from the release rather than from an image: the binary is the whole
+# artifact, and a checksum from the release's own .dgst file makes the build
+# fail if the URL ever serves something else. A new version means a new
+# checksum - take both from the release page, never one without the other.
+FROM alpine:3.24.3 AS xray
+ARG XRAY_VERSION=26.11.9
+ARG XRAY_SHA256=b651f7e1d9966ee2c1b1ee1bf8b52c72771824d3065dce96bbc8bcc19ed95f82
+RUN apk add --no-cache curl unzip && \
+    curl -fsSL -o /tmp/xray.zip \
+      "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-64.zip" && \
+    echo "${XRAY_SHA256}  /tmp/xray.zip" | sha256sum -c - && \
+    unzip -q -j /tmp/xray.zip xray -d /usr/local/bin && \
+    chmod 0755 /usr/local/bin/xray
+
 ### Server
 FROM alpine:3.24.3
 RUN apk add --no-cache ca-certificates iptables ip6tables nftables wireguard-tools curl openssl
@@ -43,6 +59,7 @@ ENV WG_STORAGE="sqlite3:///data/db.sqlite3"
 ENV WG_HTTPS_CERT_FILE="/data/wg-access-server.crt"
 ENV WG_HTTPS_KEY_FILE="/data/wg-access-server.key"
 COPY --from=server /code/wg-access-server /usr/local/bin/wg-access-server
+COPY --from=xray /usr/local/bin/xray /usr/local/bin/xray
 COPY --from=website /code/build /website/build
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || curl -fk https://localhost:8443/health || exit 1

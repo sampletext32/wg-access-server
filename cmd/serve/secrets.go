@@ -42,6 +42,12 @@ func (cmd *servecmd) secretSources() []secretSource {
 			direct:  "WG_AMNEZIA_HEADER_PROTECTION_KEY / --amnezia-header-protection-key / amnezia.server.headerProtectionKey",
 			fileEnv: "WG_AMNEZIA_HEADER_PROTECTION_KEY_FILE",
 		},
+		{
+			value:   &cmd.AppConfig.VLESS.RealityPrivateKey,
+			file:    cmd.VLESSPrivateKeyFile,
+			direct:  "WG_VLESS_REALITY_PRIVATE_KEY / --vless-reality-private-key / vless.realityPrivateKey",
+			fileEnv: "WG_VLESS_REALITY_PRIVATE_KEY_FILE",
+		},
 	}
 }
 

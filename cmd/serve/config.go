@@ -185,6 +185,17 @@ func (cmd *servecmd) ReadConfig() *config.AppConfig {
 		logrus.Warn("No AmneziaWG profile is configured: the server speaks plain WireGuard, which is easy to detect. Set the amnezia section - shared.s1-s4 (at least 12 each), shared.h1-h4 and server.headerProtectionKey - to run it as AmneziaWG")
 	}
 
+	// A VLESS profile that a client would reject stops the server here for the
+	// same reason: a key that does not decode, a cover host that is our own
+	// name or a short id that is not hex all produce configurations that
+	// simply do not connect, and the failure then looks like a network.
+	if err := cmd.AppConfig.VLESS.Validate(); err != nil {
+		logrus.Fatalf("invalid VLESS configuration: %v", err)
+	}
+	if cmd.AppConfig.VLESS.Enabled && cmd.AppConfig.VLESS.PublicHost == "" {
+		logrus.Warn("vless.publicHost is not set: client configurations will name the address the panel was opened from, which is not necessarily where clients can reach the VLESS port")
+	}
+
 	firewall, err := network.ResolveFirewall(cmd.AppConfig.VPN.Firewall, cmd.AppConfig.VPN.DisableIPTables)
 	if err != nil {
 		logrus.Fatal(err)

@@ -45,6 +45,20 @@ func Register(app *kingpin.Application) *servecmd {
 	cli.Flag("wireguard-private-key-file", "Read the Wireguard private key from this file (e.g. a Docker secret); exclusive with --wireguard-private-key").Envar("WG_WIREGUARD_PRIVATE_KEY_FILE").StringVar(&cmd.WireGuardPrivateKeyFile)
 	cli.Flag("amnezia-header-protection-key", "AmneziaWG header protection key (base64); it is handed to every client, like a pre-shared key").Envar("WG_AMNEZIA_HEADER_PROTECTION_KEY").StringVar(&cmd.AppConfig.Amnezia.Server.HeaderProtectionKey)
 	cli.Flag("amnezia-header-protection-key-file", "Read the AmneziaWG header protection key from this file (e.g. a Docker secret); exclusive with --amnezia-header-protection-key").Envar("WG_AMNEZIA_HEADER_PROTECTION_KEY_FILE").StringVar(&cmd.AmneziaHeaderKeyFile)
+	cli.Flag("vless-enabled", "Serve VLESS over REALITY next to WireGuard").Envar("WG_VLESS_ENABLED").Default("false").BoolVar(&cmd.AppConfig.VLESS.Enabled)
+	cli.Flag("vless-listen-port", "The port Xray listens on inside the container (not published; the service maps the public port to it)").Envar("WG_VLESS_LISTEN_PORT").Default(strconv.Itoa(config.DefaultVLESSListenPort)).IntVar(&cmd.AppConfig.VLESS.ListenPort)
+	cli.Flag("vless-api-port", "The loopback port of the Xray management API").Envar("WG_VLESS_API_PORT").Default(strconv.Itoa(config.DefaultVLESSAPIPort)).IntVar(&cmd.AppConfig.VLESS.APIPort)
+	cli.Flag("vless-public-host", "The name clients put in their VLESS configuration (the address they resolve)").Envar("WG_VLESS_PUBLIC_HOST").StringVar(&cmd.AppConfig.VLESS.PublicHost)
+	cli.Flag("vless-public-ip", "The address client configurations dial, when the mobile clients must not resolve a name (see vless.publicIP)").Envar("WG_VLESS_PUBLIC_IP").StringVar(&cmd.AppConfig.VLESS.PublicIP)
+	cli.Flag("vless-public-port", "The port clients connect to, normally 443").Envar("WG_VLESS_PUBLIC_PORT").Default("443").IntVar(&cmd.AppConfig.VLESS.PublicPort)
+	cli.Flag("vless-cover-host", "The HTTPS site the server pretends to be: the client's SNI and what traefik routes on").Envar("WG_VLESS_COVER_HOST").StringVar(&cmd.AppConfig.VLESS.CoverHost)
+	cli.Flag("vless-reality-private-key", "REALITY private key (base64url, 32 bytes); the public half is derived and goes to clients").Envar("WG_VLESS_REALITY_PRIVATE_KEY").StringVar(&cmd.AppConfig.VLESS.RealityPrivateKey)
+	cli.Flag("vless-reality-private-key-file", "Read the REALITY private key from this file (e.g. a Docker secret); exclusive with --vless-reality-private-key").Envar("WG_VLESS_REALITY_PRIVATE_KEY_FILE").StringVar(&cmd.VLESSPrivateKeyFile)
+	cli.Flag("vless-short-id", "REALITY short id (hex, up to 16 characters); keep it stable, it is in every client configuration").Envar("WG_VLESS_SHORT_ID").StringVar(&cmd.AppConfig.VLESS.ShortID)
+	cli.Flag("vless-flow", "VLESS flow (empty for none)").Envar("WG_VLESS_FLOW").Default(config.DefaultVLESSFlow).StringVar(&cmd.AppConfig.VLESS.Flow)
+	cli.Flag("vless-fingerprint", "uTLS fingerprint clients present").Envar("WG_VLESS_FINGERPRINT").Default(config.DefaultVLESSFingerprint).StringVar(&cmd.AppConfig.VLESS.Fingerprint)
+	cli.Flag("vless-alpn", "ALPN protocols offered by the server and written into client configurations").Envar("WG_VLESS_ALPN").Default("h2").StringsVar(&cmd.AppConfig.VLESS.ALPN)
+	cli.Flag("vless-log-level", "What the Xray process logs (debug, info, warning, error)").Envar("WG_VLESS_LOG_LEVEL").Default(config.DefaultVLESSLogLevel).StringVar(&cmd.AppConfig.VLESS.LogLevel)
 	cli.Flag("wireguard-port", "The port that the Wireguard server will listen on").Envar("WG_WIREGUARD_PORT").Default("51820").IntVar(&cmd.AppConfig.WireGuard.Port)
 	cli.Flag("wireguard-mtu", "The maximum transmission unit (MTU) to be used on the server-side interface.").Envar("WG_WIREGUARD_MTU").Default("1420").IntVar(&cmd.AppConfig.WireGuard.MTU)
 	cli.Flag("vpn-allowed-ips", "A list of networks that VPN clients will be allowed to connect to via the VPN").Envar("WG_VPN_ALLOWED_IPS").Default("0.0.0.0/0", "::/0").StringsVar(&cmd.AppConfig.VPN.AllowedIPs)
@@ -74,5 +88,8 @@ type servecmd struct {
 	// AmneziaHeaderKeyFile is the path given through the _FILE variant of the
 	// header protection key; the value itself ends up in the AppConfig.
 	AmneziaHeaderKeyFile string
-	AppConfig            config.AppConfig
+	// VLESSPrivateKeyFile is the path given through the _FILE variant of the
+	// REALITY private key; the value itself ends up in the AppConfig.
+	VLESSPrivateKeyFile string
+	AppConfig           config.AppConfig
 }
