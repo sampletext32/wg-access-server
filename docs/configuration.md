@@ -320,7 +320,93 @@ The kernel dataplane does the crypto in-kernel, without a TUN copy, and is the
 cheaper of the two per packet.
 
 If the module is loaded but the server keeps falling back, the log line names
-the reason (for example an old module reporting netlink family version 2).
+the reason (for example an old module version reporting netlink family version 2).
+
+## VLESS (REALITY)
+
+VLESS is the second protocol this server can speak. It runs **next to**
+AmneziaWG rather than instead of it: every device gets a WireGuard key pair
+and a VLESS user id, and one exported document carries both, so a client
+imports a device once and can use either protocol.
+
+The server runs Xray as a child process. The binary has to be in the image or
+on the `PATH` (`vless.binary`), and users are added and removed through its
+management API - a device gaining or losing access never restarts the process,
+so nobody's session drops because somebody else added a device.
+
+```yaml
+vless:
+  enabled: true
+  listenPort: 10443          # inside the container; the service publishes 443
+  apiPort: 10085             # loopback management API
+  publicHost: vless.example.com   # what clients dial, i.e. the DNS name
+  publicPort: 443
+  coverHost: www.example.com      # what the server pretends to be (the SNI)
+  shortId: "106349f5e72cdab8"
+  flow: xtls-rprx-vision
+  fingerprint: firefox
+  alpn:
+    - h2
+  server:
+    realityPrivateKey: "<xray x25519 private key>"
+```
+
+| Field | Meaning |
+|---|---|
+| `publicHost` | the name a client resolves and connects to. It is **not** the cover host |
+| `publicPort` | the port a client connects to, normally 443 |
+| `coverHost` | a real HTTPS site the server impersonates: the client sends it as the SNI, and an unauthenticated handshake is relayed to it, so a prober sees that site's own certificate |
+| `shortId`, `server.realityPrivateKey` | the REALITY identity. The public key is derived from the private one, so only the private one is configured. Changing either invalidates every configuration that was handed out |
+| `flow` | `xtls-rprx-vision` (the default) or empty |
+| `fingerprint`, `alpn` | what the client presents; they shape the handshake, not the server |
+
+Generate the key pair with `xray x25519` and keep the private half in a secret
+(`WG_VLESS_REALITY_PRIVATE_KEY_FILE`, as for the WireGuard key). The server
+refuses to start with a key that does not decode, a cover host that equals the
+public one, or a short id that is not hexadecimal: each of those produces
+configurations that simply do not connect.
+
+### Reaching it behind a proxy
+
+REALITY terminates TLS itself, so whatever is in front must pass the bytes
+through and must not terminate. Behind traefik that is an `IngressRouteTCP`
+that matches the cover host's SNI:
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: HostSNI(`www.example.com`)
+      services:
+        - name: wg-vpn-example-vless
+          port: 443
+  tls:
+    passthrough: true
+```
+
+traefik evaluates TCP routers before HTTP ones on the same entrypoint, so the
+existing HTTPS sites are unaffected - as long as no HTTP router names that SNI.
+One cover host per cluster entrypoint: two releases cannot claim the same one.
+
+### What VLESS does not do
+
+`vpn.policies`, `vpn.clientIsolation` and the per-device firewall rules are
+built from the device's address in the tunnel. A VLESS user has none - the
+connection terminates in Xray and leaves from the pod - so those controls apply
+to the AmneziaWG path only. VLESS traffic is still counted per device, and a
+device that is disabled, expired or deleted loses its VLESS user at once.
+
+What it *does* do is forward. Xray v26 blocks private and reserved addresses
+from a VLESS inbound by default, which is the right default for a proxy exposed
+to strangers and the wrong one here: the WireGuard side forwards whatever
+`vpn.allowedIPs` allows, the tunnel's own resolver and the cluster's addresses
+included, and a second protocol that refuses part of the same address space
+would behave unlike the first for no visible reason. The rendered `freedom`
+outbound therefore carries an unconditional `allow` rule, Xray's documented way
+of switching that policy off. The consequence is worth stating: a VLESS user can
+reach anything the pod can reach, exactly as an AmneziaWG user can.
 
 ## The client configuration
 
