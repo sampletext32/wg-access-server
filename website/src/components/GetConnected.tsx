@@ -54,6 +54,9 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
   // document; a small document is a single code.
   const [qrCodes, setQrCodes] = React.useState<string[] | undefined>(undefined);
   const [qrIndex, setQrIndex] = React.useState(0);
+  // cycle changes whenever the sequence (re)starts, so the progress bar's
+  // animation restarts even when it begins again at the first code.
+  const [cycle, setCycle] = React.useState(0);
   React.useEffect(() => {
     let current = true;
     if (!native) {
@@ -84,16 +87,20 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
   };
 
   // The codes cycle in place: no interaction is needed, the phone just has to
-  // be pointed at the screen while the codes change.
+  // be pointed at the screen while the codes change. The cycle runs only while
+  // the mobile tab is visible and restarts at the first code when it is opened,
+  // so the progress bar and the code can never be out of step.
   React.useEffect(() => {
-    if (!qrCodes || qrCodes.length <= 1) {
+    if (!qrCodes || qrCodes.length <= 1 || currentTab !== 'mobile') {
       return;
     }
+    setQrIndex(0);
+    setCycle((value) => value + 1);
     const timer = window.setInterval(() => {
       setQrIndex((index) => (index + 1) % qrCodes.length);
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [qrCodes]);
+  }, [qrCodes, currentTab]);
 
   const downloadConfigFile = () => {
     const info = AppState.info!;
@@ -201,7 +208,7 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
                       >
                         {/* keyed by the index so the animation restarts for every code */}
                         <Box
-                          key={qrIndex}
+                          key={`${cycle}-${qrIndex}`}
                           sx={{
                             height: '100%',
                             bgcolor: 'primary.main',
