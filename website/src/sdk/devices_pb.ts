@@ -275,6 +275,7 @@ export declare namespace Device {
 		disabled: boolean,
 		expiresAt?: googleProtobufTimestamp.Timestamp.AsObject,
 		routes: Array<string>,
+		vlessId: string,
 	}
 }
 
@@ -416,6 +417,13 @@ export class Device extends jspb.Message {
 		return jspb.Message.addToRepeatedField(this, 17, value, index);
 	}
 
+	getVlessId(): string {return jspb.Message.getFieldWithDefault(this, 18, "");
+	}
+
+	setVlessId(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 18, value);
+	}
+
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		Device.serializeBinaryToWriter(this, writer);
@@ -442,6 +450,7 @@ export class Device extends jspb.Message {
 			disabled: this.getDisabled(),
 			expiresAt: (f = this.getExpiresAt()) && f.toObject(),
 			routes: this.getRoutes(),
+			vlessId: this.getVlessId(),
 		};
 	}
 
@@ -513,6 +522,10 @@ export class Device extends jspb.Message {
 		const field17 = message.getRoutes();
 		if (field17.length > 0) {
 			writer.writeRepeatedString(17, field17);
+		}
+		const field18 = message.getVlessId();
+		if (field18.length > 0) {
+			writer.writeString(18, field18);
 		}
 	}
 
@@ -599,6 +612,10 @@ export class Device extends jspb.Message {
 			case 17:
 				const field17 = reader.readString()
 				message.addRoutes(field17);
+				break;
+			case 18:
+				const field18 = reader.readString()
+				message.setVlessId(field18);
 				break;
 			default:
 				reader.skipField();
@@ -1610,6 +1627,7 @@ function DeviceFromObject(obj: Device.AsObject | undefined): Device | undefined 
 	message.setExpiresAt(TimestampFromObject(obj.expiresAt));
 	(obj.routes || [])
 		.forEach((item) => message.addRoutes(item));
+	message.setVlessId(obj.vlessId);
 	return message;
 }
 

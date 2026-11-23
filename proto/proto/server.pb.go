@@ -107,7 +107,10 @@ type InfoRes struct {
 	// not per-user data: every client of this server receives the same values,
 	// the header protection key included, because a client without it cannot
 	// read a single packet from an AmneziaWG server.
-	Amnezia       *AmneziaClientConfig `protobuf:"bytes,28,opt,name=amnezia,proto3" json:"amnezia,omitempty"`
+	Amnezia *AmneziaClientConfig `protobuf:"bytes,28,opt,name=amnezia,proto3" json:"amnezia,omitempty"`
+	// the VLESS/REALITY parameters a client needs. Absent when the server does
+	// not serve VLESS; every device then has only its WireGuard credentials.
+	Vless         *VLESSClientConfig `protobuf:"bytes,29,opt,name=vless,proto3" json:"vless,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -331,6 +334,121 @@ func (x *InfoRes) GetAmnezia() *AmneziaClientConfig {
 	return nil
 }
 
+func (x *InfoRes) GetVless() *VLESSClientConfig {
+	if x != nil {
+		return x.Vless
+	}
+	return nil
+}
+
+// VLESSClientConfig is the server side of a VLESS client configuration: where
+// to dial, and what makes the connection indistinguishable from a visit to the
+// cover site. The per-device half - the user id - is on the device itself.
+//
+// public_key is the REALITY public key derived from the server's private one;
+// a client that does not have it cannot complete the handshake. short_id and
+// server_name are the same for everybody, and fingerprint and alpn only shape
+// the client's own handshake.
+type VLESSClientConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	PublicKey     string                 `protobuf:"bytes,3,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	ShortId       string                 `protobuf:"bytes,4,opt,name=short_id,json=shortId,proto3" json:"short_id,omitempty"`
+	ServerName    string                 `protobuf:"bytes,5,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	Flow          string                 `protobuf:"bytes,6,opt,name=flow,proto3" json:"flow,omitempty"`
+	Fingerprint   string                 `protobuf:"bytes,7,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	Alpn          []string               `protobuf:"bytes,8,rep,name=alpn,proto3" json:"alpn,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VLESSClientConfig) Reset() {
+	*x = VLESSClientConfig{}
+	mi := &file_server_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VLESSClientConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VLESSClientConfig) ProtoMessage() {}
+
+func (x *VLESSClientConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_server_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VLESSClientConfig.ProtoReflect.Descriptor instead.
+func (*VLESSClientConfig) Descriptor() ([]byte, []int) {
+	return file_server_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *VLESSClientConfig) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *VLESSClientConfig) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *VLESSClientConfig) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+func (x *VLESSClientConfig) GetShortId() string {
+	if x != nil {
+		return x.ShortId
+	}
+	return ""
+}
+
+func (x *VLESSClientConfig) GetServerName() string {
+	if x != nil {
+		return x.ServerName
+	}
+	return ""
+}
+
+func (x *VLESSClientConfig) GetFlow() string {
+	if x != nil {
+		return x.Flow
+	}
+	return ""
+}
+
+func (x *VLESSClientConfig) GetFingerprint() string {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return ""
+}
+
+func (x *VLESSClientConfig) GetAlpn() []string {
+	if x != nil {
+		return x.Alpn
+	}
+	return nil
+}
+
 // AmneziaClientConfig is what a client needs to talk to an AmneziaWG server:
 // S1-S4, H1-H4, the header protection key, random trailers, disabled cookies
 // and content padding have to match the server's own values, the rest only
@@ -369,7 +487,7 @@ type AmneziaClientConfig struct {
 
 func (x *AmneziaClientConfig) Reset() {
 	*x = AmneziaClientConfig{}
-	mi := &file_server_proto_msgTypes[2]
+	mi := &file_server_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -381,7 +499,7 @@ func (x *AmneziaClientConfig) String() string {
 func (*AmneziaClientConfig) ProtoMessage() {}
 
 func (x *AmneziaClientConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[2]
+	mi := &file_server_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,7 +512,7 @@ func (x *AmneziaClientConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AmneziaClientConfig.ProtoReflect.Descriptor instead.
 func (*AmneziaClientConfig) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{2}
+	return file_server_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AmneziaClientConfig) GetJc() uint32 {
@@ -577,7 +695,8 @@ var File_server_proto protoreflect.FileDescriptor
 const file_server_proto_rawDesc = "" +
 	"\n" +
 	"\fserver.proto\x12\x05proto\x1a\x1egoogle/protobuf/wrappers.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x0fbuildinfo.proto\"\t\n" +
-	"\aInfoReq\"\xf9\t\n" +
+	"\aInfoReq\"\xa9\n" +
+	"\n" +
 	"\aInfoRes\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x120\n" +
@@ -611,7 +730,19 @@ const file_server_proto_rawDesc = "" +
 	"\x16api_token_max_lifetime\x18\x19 \x01(\v2\x19.google.protobuf.DurationR\x13apiTokenMaxLifetime\x12*\n" +
 	"\x11user_display_name\x18\x1a \x01(\tR\x0fuserDisplayName\x12#\n" +
 	"\ruser_provider\x18\x1b \x01(\tR\fuserProvider\x124\n" +
-	"\aamnezia\x18\x1c \x01(\v2\x1a.proto.AmneziaClientConfigR\aamneziaJ\x04\b\x04\x10\x05R\vhost_vpn_ip\"\xbb\x05\n" +
+	"\aamnezia\x18\x1c \x01(\v2\x1a.proto.AmneziaClientConfigR\aamnezia\x12.\n" +
+	"\x05vless\x18\x1d \x01(\v2\x18.proto.VLESSClientConfigR\x05vlessJ\x04\b\x04\x10\x05R\vhost_vpn_ip\"\xe0\x01\n" +
+	"\x11VLESSClientConfig\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x03 \x01(\tR\tpublicKey\x12\x19\n" +
+	"\bshort_id\x18\x04 \x01(\tR\ashortId\x12\x1f\n" +
+	"\vserver_name\x18\x05 \x01(\tR\n" +
+	"serverName\x12\x12\n" +
+	"\x04flow\x18\x06 \x01(\tR\x04flow\x12 \n" +
+	"\vfingerprint\x18\a \x01(\tR\vfingerprint\x12\x12\n" +
+	"\x04alpn\x18\b \x03(\tR\x04alpn\"\xbb\x05\n" +
 	"\x13AmneziaClientConfig\x12\x0e\n" +
 	"\x02jc\x18\x01 \x01(\rR\x02jc\x12\x12\n" +
 	"\x04jmin\x18\x02 \x01(\rR\x04jmin\x12\x12\n" +
@@ -654,28 +785,30 @@ func file_server_proto_rawDescGZIP() []byte {
 	return file_server_proto_rawDescData
 }
 
-var file_server_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_server_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_server_proto_goTypes = []any{
 	(*InfoReq)(nil),                // 0: proto.InfoReq
 	(*InfoRes)(nil),                // 1: proto.InfoRes
-	(*AmneziaClientConfig)(nil),    // 2: proto.AmneziaClientConfig
-	(*wrapperspb.StringValue)(nil), // 3: google.protobuf.StringValue
-	(*durationpb.Duration)(nil),    // 4: google.protobuf.Duration
-	(*BuildInfo)(nil),              // 5: proto.BuildInfo
+	(*VLESSClientConfig)(nil),      // 2: proto.VLESSClientConfig
+	(*AmneziaClientConfig)(nil),    // 3: proto.AmneziaClientConfig
+	(*wrapperspb.StringValue)(nil), // 4: google.protobuf.StringValue
+	(*durationpb.Duration)(nil),    // 5: google.protobuf.Duration
+	(*BuildInfo)(nil),              // 6: proto.BuildInfo
 }
 var file_server_proto_depIdxs = []int32{
-	3, // 0: proto.InfoRes.host:type_name -> google.protobuf.StringValue
-	4, // 1: proto.InfoRes.inactive_device_grace_period:type_name -> google.protobuf.Duration
-	5, // 2: proto.InfoRes.build_info:type_name -> proto.BuildInfo
-	4, // 3: proto.InfoRes.api_token_max_lifetime:type_name -> google.protobuf.Duration
-	2, // 4: proto.InfoRes.amnezia:type_name -> proto.AmneziaClientConfig
-	0, // 5: proto.Server.Info:input_type -> proto.InfoReq
-	1, // 6: proto.Server.Info:output_type -> proto.InfoRes
-	6, // [6:7] is the sub-list for method output_type
-	5, // [5:6] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	4, // 0: proto.InfoRes.host:type_name -> google.protobuf.StringValue
+	5, // 1: proto.InfoRes.inactive_device_grace_period:type_name -> google.protobuf.Duration
+	6, // 2: proto.InfoRes.build_info:type_name -> proto.BuildInfo
+	5, // 3: proto.InfoRes.api_token_max_lifetime:type_name -> google.protobuf.Duration
+	3, // 4: proto.InfoRes.amnezia:type_name -> proto.AmneziaClientConfig
+	2, // 5: proto.InfoRes.vless:type_name -> proto.VLESSClientConfig
+	0, // 6: proto.Server.Info:input_type -> proto.InfoReq
+	1, // 7: proto.Server.Info:output_type -> proto.InfoRes
+	7, // [7:8] is the sub-list for method output_type
+	6, // [6:7] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_server_proto_init() }
@@ -690,7 +823,7 @@ func file_server_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_proto_rawDesc), len(file_server_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -274,6 +274,7 @@ func mapDevice(d *storage.Device) *proto.Device {
 		Disabled:          d.Disabled,
 		ExpiresAt:         timeToTimestamp(d.ExpiresAt),
 		Routes:            d.RouteList(),
+		VlessId:           d.VLESSID,
 		/**
 		 * WireGuard is a connectionless UDP protocol - data is only
 		 * sent over the wire when the client is sending real traffic.

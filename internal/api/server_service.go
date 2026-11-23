@@ -111,6 +111,7 @@ func (s *ServerService) Info(ctx context.Context, _ *connect.Request[proto.InfoR
 		UserDisplayName:                 user.Name,
 		UserProvider:                    user.Provider,
 		Amnezia:                         amneziaClientConfig(s.Config.Amnezia),
+		Vless:                           vlessClientConfig(s.Config),
 	}), nil
 }
 
@@ -180,5 +181,39 @@ func amneziaClientConfig(a config.AmneziaConfig) *proto.AmneziaClientConfig {
 		HeaderProtectionKey:    a.Server.HeaderProtectionKey,
 		RandomTrailers:         a.Shared.RandomTrailers,
 		DisableCookies:         a.Shared.DisableCookies,
+	}
+}
+
+// vlessClientConfig is the server half of a VLESS client configuration: where
+// to dial and what makes the handshake look like a visit to the cover site.
+// The public key is derived from the configured private one here, so the two
+// cannot disagree and the server never has to store both.
+//
+// Nil when the server does not serve VLESS, or when it has no name clients can
+// dial: a configuration without a host would be one nobody can import.
+func vlessClientConfig(conf *config.AppConfig) *proto.VLESSClientConfig {
+	if !conf.VLESS.Enabled {
+		return nil
+	}
+	// DialAddress rather than PublicHost: the mobile clients start their local
+	// Xray inside the tunnel it just created, so a name would have to be
+	// resolved with the DNS servers of a connection that does not exist yet.
+	host := conf.VLESS.DialAddress()
+	if host == "" {
+		host = conf.ExternalHost
+	}
+	publicKey := conf.VLESS.PublicKey()
+	if host == "" || publicKey == "" {
+		return nil
+	}
+	return &proto.VLESSClientConfig{
+		Host:        host,
+		Port:        int32(conf.VLESS.PublicPort),
+		PublicKey:   publicKey,
+		ShortId:     conf.VLESS.ShortID,
+		ServerName:  conf.VLESS.ServerName(),
+		Flow:        conf.VLESS.Flow,
+		Fingerprint: conf.VLESS.Fingerprint,
+		Alpn:        conf.VLESS.ALPN,
 	}
 }

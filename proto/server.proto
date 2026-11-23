@@ -70,6 +70,28 @@ message InfoRes {
   // the header protection key included, because a client without it cannot
   // read a single packet from an AmneziaWG server.
   AmneziaClientConfig amnezia = 28;
+  // the VLESS/REALITY parameters a client needs. Absent when the server does
+  // not serve VLESS; every device then has only its WireGuard credentials.
+  VLESSClientConfig vless = 29;
+}
+
+// VLESSClientConfig is the server side of a VLESS client configuration: where
+// to dial, and what makes the connection indistinguishable from a visit to the
+// cover site. The per-device half - the user id - is on the device itself.
+//
+// public_key is the REALITY public key derived from the server's private one;
+// a client that does not have it cannot complete the handshake. short_id and
+// server_name are the same for everybody, and fingerprint and alpn only shape
+// the client's own handshake.
+message VLESSClientConfig {
+  string host = 1;
+  int32 port = 2;
+  string public_key = 3;
+  string short_id = 4;
+  string server_name = 5;
+  string flow = 6;
+  string fingerprint = 7;
+  repeated string alpn = 8;
 }
 
 // AmneziaClientConfig is what a client needs to talk to an AmneziaWG server:

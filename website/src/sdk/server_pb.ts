@@ -143,6 +143,7 @@ export declare namespace InfoRes {
 		userDisplayName: string,
 		userProvider: string,
 		amnezia?: AmneziaClientConfig.AsObject,
+		vless?: VLESSClientConfig.AsObject,
 	}
 }
 
@@ -352,6 +353,14 @@ export class InfoRes extends jspb.Message {
 		(jspb.Message as any).setWrapperField(this, 28, value);
 	}
 
+	getVless(): VLESSClientConfig {
+		return jspb.Message.getWrapperField(this, VLESSClientConfig, 29);
+	}
+
+	setVless(value?: VLESSClientConfig): void {
+		(jspb.Message as any).setWrapperField(this, 29, value);
+	}
+
 	serializeBinary(): Uint8Array {
 		const writer = new jspb.BinaryWriter();
 		InfoRes.serializeBinaryToWriter(this, writer);
@@ -388,6 +397,7 @@ export class InfoRes extends jspb.Message {
 			userDisplayName: this.getUserDisplayName(),
 			userProvider: this.getUserProvider(),
 			amnezia: (f = this.getAmnezia()) && f.toObject(),
+			vless: (f = this.getVless()) && f.toObject(),
 		};
 	}
 
@@ -499,6 +509,10 @@ export class InfoRes extends jspb.Message {
 		const field28 = message.getAmnezia();
 		if (field28 != null) {
 			writer.writeMessage(28, field28, AmneziaClientConfig.serializeBinaryToWriter);
+		}
+		const field29 = message.getVless();
+		if (field29 != null) {
+			writer.writeMessage(29, field29, VLESSClientConfig.serializeBinaryToWriter);
 		}
 	}
 
@@ -627,6 +641,205 @@ export class InfoRes extends jspb.Message {
 				const field28 = new AmneziaClientConfig();
 				reader.readMessage(field28, AmneziaClientConfig.deserializeBinaryFromReader);
 				message.setAmnezia(field28);
+				break;
+			case 29:
+				const field29 = new VLESSClientConfig();
+				reader.readMessage(field29, VLESSClientConfig.deserializeBinaryFromReader);
+				message.setVless(field29);
+				break;
+			default:
+				reader.skipField();
+				break;
+			}
+		}
+		return message;
+	}
+
+}
+export declare namespace VLESSClientConfig {
+	export type AsObject = {
+		host: string,
+		port: number,
+		publicKey: string,
+		shortId: string,
+		serverName: string,
+		flow: string,
+		fingerprint: string,
+		alpn: Array<string>,
+	}
+}
+
+export class VLESSClientConfig extends jspb.Message {
+
+	private static repeatedFields_ = [
+		8,
+	];
+
+	constructor(data?: jspb.Message.MessageArray) {
+		super();
+		jspb.Message.initialize(this, data || [], 0, -1, VLESSClientConfig.repeatedFields_, null);
+	}
+
+
+	getHost(): string {return jspb.Message.getFieldWithDefault(this, 1, "");
+	}
+
+	setHost(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 1, value);
+	}
+
+	getPort(): number {return jspb.Message.getFieldWithDefault(this, 2, 0);
+	}
+
+	setPort(value: number): void {
+		(jspb.Message as any).setProto3IntField(this, 2, value);
+	}
+
+	getPublicKey(): string {return jspb.Message.getFieldWithDefault(this, 3, "");
+	}
+
+	setPublicKey(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 3, value);
+	}
+
+	getShortId(): string {return jspb.Message.getFieldWithDefault(this, 4, "");
+	}
+
+	setShortId(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 4, value);
+	}
+
+	getServerName(): string {return jspb.Message.getFieldWithDefault(this, 5, "");
+	}
+
+	setServerName(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 5, value);
+	}
+
+	getFlow(): string {return jspb.Message.getFieldWithDefault(this, 6, "");
+	}
+
+	setFlow(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 6, value);
+	}
+
+	getFingerprint(): string {return jspb.Message.getFieldWithDefault(this, 7, "");
+	}
+
+	setFingerprint(value: string): void {
+		(jspb.Message as any).setProto3StringField(this, 7, value);
+	}
+
+	getAlpn(): Array<string> {return jspb.Message.getFieldWithDefault(this, 8, [""]);
+	}
+
+	setAlpn(value: Array<string>): void {
+		(jspb.Message as any).setProto3StringField(this, 8, value);
+	}
+
+	addAlpn(value: string, index?: number): void {
+		return jspb.Message.addToRepeatedField(this, 8, value, index);
+	}
+
+	serializeBinary(): Uint8Array {
+		const writer = new jspb.BinaryWriter();
+		VLESSClientConfig.serializeBinaryToWriter(this, writer);
+		return writer.getResultBuffer();
+	}
+
+	toObject(): VLESSClientConfig.AsObject {
+		let f: any;
+		return {
+			host: this.getHost(),
+			port: this.getPort(),
+			publicKey: this.getPublicKey(),
+			shortId: this.getShortId(),
+			serverName: this.getServerName(),
+			flow: this.getFlow(),
+			fingerprint: this.getFingerprint(),
+			alpn: this.getAlpn(),
+		};
+	}
+
+	static serializeBinaryToWriter(message: VLESSClientConfig, writer: jspb.BinaryWriter): void {
+		const field1 = message.getHost();
+		if (field1.length > 0) {
+			writer.writeString(1, field1);
+		}
+		const field2 = message.getPort();
+		if (field2 != 0) {
+			writer.writeInt32(2, field2);
+		}
+		const field3 = message.getPublicKey();
+		if (field3.length > 0) {
+			writer.writeString(3, field3);
+		}
+		const field4 = message.getShortId();
+		if (field4.length > 0) {
+			writer.writeString(4, field4);
+		}
+		const field5 = message.getServerName();
+		if (field5.length > 0) {
+			writer.writeString(5, field5);
+		}
+		const field6 = message.getFlow();
+		if (field6.length > 0) {
+			writer.writeString(6, field6);
+		}
+		const field7 = message.getFingerprint();
+		if (field7.length > 0) {
+			writer.writeString(7, field7);
+		}
+		const field8 = message.getAlpn();
+		if (field8.length > 0) {
+			writer.writeRepeatedString(8, field8);
+		}
+	}
+
+	static deserializeBinary(bytes: Uint8Array): VLESSClientConfig {
+		var reader = new jspb.BinaryReader(bytes);
+		var message = new VLESSClientConfig();
+		return VLESSClientConfig.deserializeBinaryFromReader(message, reader);
+	}
+
+	static deserializeBinaryFromReader(message: VLESSClientConfig, reader: jspb.BinaryReader): VLESSClientConfig {
+		while (reader.nextField()) {
+			if (reader.isEndGroup()) {
+				break;
+			}
+			const field = reader.getFieldNumber();
+			switch (field) {
+			case 1:
+				const field1 = reader.readString()
+				message.setHost(field1);
+				break;
+			case 2:
+				const field2 = reader.readInt32()
+				message.setPort(field2);
+				break;
+			case 3:
+				const field3 = reader.readString()
+				message.setPublicKey(field3);
+				break;
+			case 4:
+				const field4 = reader.readString()
+				message.setShortId(field4);
+				break;
+			case 5:
+				const field5 = reader.readString()
+				message.setServerName(field5);
+				break;
+			case 6:
+				const field6 = reader.readString()
+				message.setFlow(field6);
+				break;
+			case 7:
+				const field7 = reader.readString()
+				message.setFingerprint(field7);
+				break;
+			case 8:
+				const field8 = reader.readString()
+				message.addAlpn(field8);
 				break;
 			default:
 				reader.skipField();
@@ -1158,6 +1371,7 @@ function InfoResFromObject(obj: InfoRes.AsObject | undefined): InfoRes | undefin
 	message.setUserDisplayName(obj.userDisplayName);
 	message.setUserProvider(obj.userProvider);
 	message.setAmnezia(AmneziaClientConfigFromObject(obj.amnezia));
+	message.setVless(VLESSClientConfigFromObject(obj.vless));
 	return message;
 }
 
@@ -1220,6 +1434,23 @@ function AmneziaClientConfigFromObject(obj: AmneziaClientConfig.AsObject | undef
 	message.setHeaderProtectionKey(obj.headerProtectionKey);
 	message.setRandomTrailers(obj.randomTrailers);
 	message.setDisableCookies(obj.disableCookies);
+	return message;
+}
+
+function VLESSClientConfigFromObject(obj: VLESSClientConfig.AsObject | undefined): VLESSClientConfig | undefined {
+	if (obj === undefined) {
+		return undefined;
+	}
+	const message = new VLESSClientConfig();
+	message.setHost(obj.host);
+	message.setPort(obj.port);
+	message.setPublicKey(obj.publicKey);
+	message.setShortId(obj.shortId);
+	message.setServerName(obj.serverName);
+	message.setFlow(obj.flow);
+	message.setFingerprint(obj.fingerprint);
+	(obj.alpn || [])
+		.forEach((item) => message.addAlpn(item));
 	return message;
 }
 

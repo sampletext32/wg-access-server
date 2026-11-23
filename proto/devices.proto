@@ -55,6 +55,11 @@ message Device {
   // the networks behind the device, in CIDR notation. They are part of the
   // peer's allowed IPs, so traffic for them goes through this device.
   repeated string routes = 17;
+  // the device's user id on the VLESS dataplane. It is the credential that
+  // goes into the VLESS client configuration, next to the WireGuard key pair
+  // that the client generates itself, and it is what the server's counters are
+  // keyed by. Every device has one, whether or not the server serves VLESS.
+  string vless_id = 18;
 }
 
 message AddDeviceReq {
