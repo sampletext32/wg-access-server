@@ -161,6 +161,18 @@ func TestAmneziaConfigValidate(t *testing.T) {
 			wantErr: "needs shared.randomTrailers",
 		},
 		{
+			// The kernel packs this into one 16-bit range, so a larger value
+			// would run on a userspace node and fail only on a kernel one.
+			name: "content padding the kernel cannot carry",
+			profile: func() AmneziaConfig {
+				p := validProfile()
+				p.Shared.ContentPaddingAddition = "0-70000"
+				return p
+			}(),
+			mtu:     1360,
+			wantErr: "16-bit range",
+		},
+		{
 			name: "a signature packet the client cannot parse",
 			profile: func() AmneziaConfig {
 				p := validProfile()

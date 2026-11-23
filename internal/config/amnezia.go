@@ -9,6 +9,12 @@ import (
 	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 )
 
+// kernelMaxPackedRange is the largest value the kernel module can carry in an
+// attribute that is a 16-bit range packed into one word (content padding and
+// the timers). The userspace device's UAPI would take a uint32, the kernel
+// would not, so the server validates against the narrower limit.
+const kernelMaxPackedRange = 65535
+
 // AmneziaConfig is the AmneziaWG profile of this server. Unlike WireGuard, its
 // obfuscation parameters must agree between the server and every client, so
 // the same block feeds both: the server's interface and every client
@@ -145,14 +151,22 @@ func (a AmneziaConfig) Validate(mtu int) error {
 	// packet, so it is refused rather than left to the device.
 	if a.Shared.ContentPaddingAddition != "" {
 		_, high, err := parseUintRange(a.Shared.ContentPaddingAddition)
+		// The kernel carries this as one 16-bit range, so a value above 65535
+		// works on a userspace node and fails on a kernel one. The server
+		// validates against the narrower limit, so a profile is refused before
+		// either interface exists rather than only on the kernel nodes.
+		if err == nil && high > kernelMaxPackedRange {
+			return fmt.Errorf("shared.contentPaddingAddition (%q) does not fit the 16-bit range the kernel module carries it in", a.Shared.ContentPaddingAddition)
+		}
 		if err == nil && high > 0 && !a.Shared.RandomTrailers {
 			return errors.New("shared.contentPaddingAddition needs shared.randomTrailers: the receiver only accepts the larger packets when it pads too")
 		}
 	}
 
-	// Everything else is the same check the device does, so the rules live in
-	// one place: key format, padding bounds, range and signature-packet
-	// syntax, jmin <= jmax.
+	// The rest is the same check the device does: key format, padding bounds,
+	// range and signature-packet syntax, jmin <= jmax. The u16 limits the
+	// kernel adds on top are checked above, because the device's own rules are
+	// the wider ones.
 	if err := a.clientAndDeviceConfig().Validate(); err != nil {
 		return err
 	}
@@ -199,6 +213,11 @@ func (a AmneziaConfig) clientAndDeviceConfig() wgembed.AmneziaConfig {
 	return c
 }
 
+// uint32Value and stringValue turn a yaml value into the pointer the embed type
+// uses, where nil means "not set". After unmarshalling a zero or empty value
+// cannot be told apart from an absent one, so it is sent as "unset"; every
+// parameter here defaults to zero anyway, so the two mean the same thing to the
+// device.
 func uint32Value(v uint32) *uint32 {
 	if v == 0 {
 		return nil

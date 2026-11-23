@@ -12,8 +12,8 @@ export function QRCode(props: Props) {
   React.useEffect(() => {
     let current = true;
     // The AmneziaVPN payload is a compressed document, but still long enough
-    // that the lowest error correction keeps the code readable at 250px; the
-    // larger bitmap keeps the modules sharp.
+    // that the lowest error correction keeps the code readable; it is drawn
+    // into a 1024px bitmap and shown at up to 512px so the modules stay sharp.
     void qrcode
       .toDataURL(props.content, { errorCorrectionLevel: 'L', margin: 2, width: 1024 })
       .then((dataURL) => {

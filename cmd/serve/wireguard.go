@@ -26,6 +26,10 @@ type vpnAddressing struct {
 // vpnAddresses works out the server's addresses from the configured networks.
 // Clients are allowed to reach them, because that is where the embedded DNS
 // proxy answers.
+//
+// It also appends that route to conf.VPN.AllowedIPs when nothing already covers
+// it: the client configurations are built later from AllowedIPs directly, so
+// this is where the server's own address gets into them.
 func vpnAddresses(conf *config.AppConfig) vpnAddressing {
 	ipv4, ipv6, err := network.ServerVPNIPs(conf.VPN.CIDR, conf.VPN.CIDRv6)
 	if err != nil {

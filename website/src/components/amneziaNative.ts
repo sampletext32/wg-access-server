@@ -9,34 +9,7 @@
 // .conf (see client/core/controllers/selfhosted/importController.cpp,
 // extractWireGuardConfig), with the description filled in from the server.
 
-// Keys the AmneziaWG importer copies from the INI into last_config verbatim.
-const AWG_KEYS = [
-  'Jc',
-  'Jmin',
-  'Jmax',
-  'S1',
-  'S2',
-  'S3',
-  'S4',
-  'H1',
-  'H2',
-  'H3',
-  'H4',
-  'I1',
-  'I2',
-  'I3',
-  'I4',
-  'I5',
-  'HeaderProtectionKey',
-  'ContentPaddingAddition',
-  'RekeyAfterTime',
-  'RekeyTimeout',
-  'RejectAfterTime',
-  'KeepaliveTimeout',
-  'MaxHandshakeAttempts',
-  'RandomTrailers',
-  'DisableCookies',
-];
+import { AWG_CONF_KEYS } from './amnezia';
 
 const DEFAULT_PORT = 51820;
 
@@ -128,7 +101,7 @@ export function buildAmneziaNative(ini: string, description: string): AmneziaNat
     .split(',')
     .map((ip) => ip.trim())
     .filter((ip) => ip.length > 0);
-  for (const key of AWG_KEYS) {
+  for (const key of AWG_CONF_KEYS) {
     const value = values.get(key);
     if (value) {
       last[key] = value;
