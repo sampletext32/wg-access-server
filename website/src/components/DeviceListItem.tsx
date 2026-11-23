@@ -26,6 +26,7 @@ import { toast } from './Toast';
 import { errorMessage } from '../Util';
 import { Chip, IconButton, Skeleton, Stack, Typography } from '@mui/material';
 import { clientConfig } from './AddDevice';
+import { AmneziaNativeConfig, buildDeviceDocument, vlessFromInfo } from './amneziaNative';
 import { GetConnected } from './GetConnected';
 
 interface Props {
@@ -41,6 +42,7 @@ function encode(bytes: Uint8Array): string {
 
 export const DeviceListItem = observer(function DeviceListItem({ device, onChange }: Props) {
   const [newConfig, setNewConfig] = React.useState<string>();
+  const [newNative, setNewNative] = React.useState<AmneziaNativeConfig>();
 
   // rotateKey gives the device a new key pair and hands back the
   // configuration that goes with it. The device keeps its name, its address
@@ -66,13 +68,22 @@ export const DeviceListItem = observer(function DeviceListItem({ device, onChang
 
     try {
       const rotated = await grpc.devices.rotateDeviceKey({ name: device.name, publicKey, presharedKey });
-      setNewConfig(
-        clientConfig({
-          info: AppState.info!,
-          privateKey,
-          address: rotated.address,
-          presharedKey,
-          persistentKeepalive: AppState.info?.clientConfigPersistentKeepalive || 0,
+      const ini = clientConfig({
+        info: AppState.info!,
+        privateKey,
+        address: rotated.address,
+        presharedKey,
+        persistentKeepalive: AppState.info?.clientConfigPersistentKeepalive || 0,
+      });
+      setNewConfig(ini);
+      // The VLESS id rotates with the key, so the document has to carry the
+      // new one: the old id stopped working with the old key.
+      setNewNative(
+        buildDeviceDocument({
+          ini,
+          description: '',
+          vless: vlessFromInfo(AppState.info),
+          vlessId: rotated.vlessId,
         }),
       );
       toast({ text: `"${device.name}" has a new key`, intent: 'success' });
@@ -168,7 +179,7 @@ export const DeviceListItem = observer(function DeviceListItem({ device, onChang
                 Install this on the device. Its old configuration no longer connects, and this one is not stored here -
                 if you lose it, give the device another key.
               </Typography>
-              <GetConnected configFile={newConfig} showMobile={true} />
+              <GetConnected configFile={newConfig} nativeDocument={newNative} showMobile={true} />
             </DialogContent>
             <DialogActions>
               <Button color="secondary" variant="outlined" onClick={() => setNewConfig(undefined)}>

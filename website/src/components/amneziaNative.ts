@@ -9,6 +9,8 @@
 // .conf (see client/core/controllers/selfhosted/importController.cpp,
 // extractWireGuardConfig), with the description filled in from the server.
 
+import type { InfoRes } from '../sdk/server_pb';
+
 import { AWG_CONF_KEYS } from './amnezia';
 
 const DEFAULT_PORT = 51820;
@@ -64,7 +66,10 @@ function splitEndpoint(endpoint: string): { host: string; port: number } {
 
 // buildAmneziaNative turns a client .conf into AmneziaVPN's JSON. description
 // is what the app will show in its server list.
-export function buildAmneziaNative(ini: string, description: string): AmneziaNativeConfig {
+// amneziaContainer is the AmneziaWG half of a device document: the WireGuard
+// configuration the server has always handed out, wrapped in the container
+// object the app stores. Both builders below start from it.
+function amneziaContainer(ini: string) {
   const values = parseIni(ini);
 
   const privateKey = values.get('PrivateKey');
@@ -108,27 +113,35 @@ export function buildAmneziaNative(ini: string, description: string): AmneziaNat
     }
   }
 
-  const document: Record<string, unknown> = {
-    containers: [
-      {
-        container: 'amnezia-awg',
-        awg: {
-          last_config: JSON.stringify(last),
-          isThirdPartyConfig: true,
-          port: String(port),
-          transport_proto: 'udp',
-        },
-      },
-    ],
-    defaultContainer: 'amnezia-awg',
-    description: description || host,
-    hostName: host,
+  const container = {
+    container: 'amnezia-awg',
+    awg: {
+      last_config: JSON.stringify(last),
+      isThirdPartyConfig: true,
+      port: String(port),
+      transport_proto: 'udp',
+    },
   };
 
   const dns = (values.get('DNS') ?? '')
     .split(/[,\s]+/)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+
+  return { container, host, dns };
+}
+
+// buildAmneziaNative turns a client .conf into AmneziaVPN's JSON. description
+// is what the app will show in its server list.
+export function buildAmneziaNative(ini: string, description: string): AmneziaNativeConfig {
+  const { container, host, dns } = amneziaContainer(ini);
+
+  const document: Record<string, unknown> = {
+    containers: [container],
+    defaultContainer: container.container,
+    description: description || host,
+    hostName: host,
+  };
   if (dns[0]) {
     document.dns1 = dns[0];
   }
@@ -139,6 +152,121 @@ export function buildAmneziaNative(ini: string, description: string): AmneziaNat
   return { json: JSON.stringify(document, null, 2), host };
 }
 
+// AmneziaClientVless is the server half of a VLESS connection, as the panel
+// receives it: where to dial and what makes the handshake look like a visit to
+// the cover site.
+export interface AmneziaClientVless {
+  host: string;
+  port: number;
+  publicKey: string;
+  shortId: string;
+  serverName: string;
+  flow: string;
+  fingerprint: string;
+  alpn: string[];
+}
+
+// buildVlessLastConfig is the client half of the VLESS connection: a socks
+// inbound the app points its tunnel at, and a VLESS outbound over REALITY. The
+// app stores it as a string, exactly like the AmneziaWG one.
+export function buildVlessLastConfig(vless: AmneziaClientVless, id: string): string {
+  const user: Record<string, unknown> = { id, encryption: 'none' };
+  // An empty flow is legal and means plain VLESS; the app omits it then.
+  if (vless.flow) {
+    user.flow = vless.flow;
+  }
+  const outbound: Record<string, unknown> = {
+    protocol: 'vless',
+    settings: { vnext: [{ address: vless.host, port: vless.port, users: [user] }] },
+    streamSettings: {
+      network: 'tcp',
+      security: 'reality',
+      // No tlsSettings here: REALITY takes its parameters from this block,
+      // and the app's own REALITY configurations carry no ALPN either. The
+      // server's alpn value shapes the handshake the server accepts; writing
+      // it into the client document would advertise a protocol REALITY does
+      // not negotiate through tlsSettings.
+      realitySettings: {
+        serverName: vless.serverName,
+        fingerprint: vless.fingerprint,
+        publicKey: vless.publicKey,
+        shortId: vless.shortId,
+        spiderX: '',
+      },
+    },
+  };
+  return JSON.stringify({
+    log: { loglevel: 'warning' },
+    inbounds: [{ listen: '127.0.0.1', port: 10808, protocol: 'socks', settings: { udp: true } }],
+    outbounds: [outbound],
+  });
+}
+
+// vlessFromInfo is the server half of the VLESS connection as the panel
+// received it, or undefined for a server that does not serve VLESS - the
+// device then gets a WireGuard-only document, exactly as before.
+export function vlessFromInfo(info: InfoRes.AsObject | undefined): AmneziaClientVless | undefined {
+  const vless = info?.vless;
+  if (!vless || !vless.host || !vless.publicKey) {
+    return undefined;
+  }
+  return {
+    host: vless.host,
+    port: vless.port,
+    publicKey: vless.publicKey,
+    shortId: vless.shortId,
+    serverName: vless.serverName,
+    flow: vless.flow,
+    fingerprint: vless.fingerprint,
+    alpn: vless.alpn ?? [],
+  };
+}
+
+// buildDeviceDocument builds the document a device is handed: the AmneziaWG
+// container it always got, plus - when the server serves VLESS - the VLESS
+// container for the same device. One import, two protocols, one code.
+//
+// Both containers are marked as third-party configurations on purpose: that
+// single flag is what makes the app treat the whole document as a device
+// configuration rather than a server it should manage, and mixing a marked and
+// an unmarked container would classify it as the same thing anyway.
+export function buildDeviceDocument(opts: {
+  ini: string;
+  description: string;
+  vless?: AmneziaClientVless;
+  vlessId?: string;
+}): AmneziaNativeConfig {
+  const { container, host, dns } = amneziaContainer(opts.ini);
+
+  const containers: Record<string, unknown>[] = [container];
+  if (opts.vless && opts.vlessId) {
+    containers.push({
+      container: 'amnezia-xray',
+      xray: {
+        last_config: buildVlessLastConfig(opts.vless, opts.vlessId),
+        isThirdPartyConfig: true,
+        port: String(opts.vless.port),
+        transport_proto: 'tcp',
+      },
+    });
+  }
+
+  const document: Record<string, unknown> = {
+    containers,
+    // The protocol the app dials first; the other one is one tap away.
+    defaultContainer: container.container,
+    description: opts.description || host,
+    hostName: host,
+  };
+  if (dns[0]) {
+    document.dns1 = dns[0];
+  }
+  if (dns[1]) {
+    document.dns2 = dns[1];
+  }
+
+  return { json: JSON.stringify(document, null, 2), host };
+}
 function base64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) {
@@ -158,11 +286,21 @@ const QR_CHUNK_SIZE = 400;
 // (qrCodeUtils.h: qrMagicCode = 1984).
 const QR_MAGIC = 1984;
 
+// qrSingleMax is how long the payload of a single-code document may be, and it
+// is a trade-off rather than a format limit. A QR code at the lowest error
+// correction holds about 2950 characters; the current live profile (five
+// AmneziaWG decoy strings, the WireGuard half and the VLESS half) measures
+// about 1950, which is a 161x161-module code - drawn at the 512 px this page
+// uses that is a little over 3 pixels per module, which phone cameras read
+// reliably. Past this the code gets sharper than the screen, so the document
+// is split into the chunked series the app reads one code at a time.
+const QR_SINGLE_MAX = 2200;
+
 // toQrChunks turns the JSON into the QR payloads AmneziaVPN scans: the JSON is
 // compressed the way qCompress does it (four-byte big-endian length + zlib),
-// split into 850-byte pieces, and each piece is prefixed with the magic code,
+// split into 400-byte pieces, and each piece is prefixed with the magic code,
 // the number of pieces and its own index before base64url encoding. A document
-// that compresses small enough is a single code.
+// that compresses small enough is a single code instead.
 //
 // Browsers without CompressionStream get no chunks; the caller falls back to
 // the raw JSON, which the importer also accepts.
@@ -179,6 +317,13 @@ export async function toQrChunks(json: string): Promise<string[]> {
   const framed = new Uint8Array(4 + compressed.byteLength);
   new DataView(framed.buffer).setUint32(0, rawLength, false);
   framed.set(new Uint8Array(compressed), 4);
+
+  // One code when it fits: the reader accepts the compressed document whole,
+  // without the chunk header.
+  const whole = base64Url(framed);
+  if (whole.length <= QR_SINGLE_MAX) {
+    return [whole];
+  }
 
   const count = Math.ceil(framed.length / QR_CHUNK_SIZE);
   const chunks: string[] = [];

@@ -77,6 +77,7 @@ const device = {
   transmitBytes: 0,
   disabled: false,
   routes: [],
+  vlessId: '',
 } as Device.AsObject;
 
 function userRow() {

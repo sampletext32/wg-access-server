@@ -18,16 +18,20 @@ import { LinuxIcon } from './Icons';
 import AppleIcon from '@mui/icons-material/Apple';
 import MicrosoftIcon from '@mui/icons-material/Microsoft';
 import { isAmnezia } from './clientProduct';
-import { buildAmneziaNative, toQrChunks } from './amneziaNative';
+import { AmneziaNativeConfig, buildAmneziaNative, toQrChunks } from './amneziaNative';
 import { QRCode } from './QRCode';
 import { TabPanel } from './TabPanel';
 
 interface Props {
   configFile: string;
+  // The document built when the device was created. It carries both protocols
+  // when the server serves VLESS; when it is absent the dialog falls back to a
+  // document built from the WireGuard configuration alone.
+  nativeDocument?: AmneziaNativeConfig;
   showMobile: boolean;
 }
 
-export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props>) {
+export function GetConnected({ configFile, nativeDocument, showMobile }: PropsWithChildren<Props>) {
   const [currentTab, setCurrentTab] = React.useState(isMobile() && showMobile ? 'mobile' : 'desktop');
   // An AmneziaWG configuration cannot be imported by the WireGuard app, so the
   // instructions have to name the client that can read it.
@@ -38,6 +42,9 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
   // makes the app show "vpn.example.com" instead of "Server 1". The QR codes
   // carry the same document in the app's chunked format.
   const native = React.useMemo(() => {
+    if (nativeDocument) {
+      return nativeDocument;
+    }
     if (!amnezia) {
       return undefined;
     }
@@ -48,7 +55,7 @@ export function GetConnected({ configFile, showMobile }: PropsWithChildren<Props
       // file rather than not at all.
       return undefined;
     }
-  }, [amnezia, configFile]);
+  }, [amnezia, configFile, nativeDocument]);
 
   // AmneziaVPN scans a series of QR codes, each one a piece of the compressed
   // document; a small document is a single code.

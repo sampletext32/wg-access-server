@@ -23,6 +23,7 @@ import { InfoRes } from '../sdk/server_pb';
 import { clientProductName } from './clientProduct';
 import { GetConnected } from './GetConnected';
 import { amneziaLines } from './amnezia';
+import { AmneziaNativeConfig, buildDeviceDocument, vlessFromInfo } from './amneziaNative';
 import { Info } from './Info';
 
 import Accordion from '@mui/material/Accordion';
@@ -50,6 +51,9 @@ export const AddDevice = observer(function AddDevice({ onAdd, onRefresh }: Props
   const [manualIPv6Address, setManualIPv6Address] = React.useState('');
   const [error, setError] = React.useState('');
   const [configFile, setConfigFile] = React.useState<string | undefined>(undefined);
+  // The document handed over, which carries both protocols when the server
+  // serves VLESS; undefined means the dialog builds an AmneziaWG-only one.
+  const [nativeDocument, setNativeDocument] = React.useState<AmneziaNativeConfig | undefined>(undefined);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [showMobile, setShowMobile] = React.useState(true);
 
@@ -95,13 +99,22 @@ export const AddDevice = observer(function AddDevice({ onAdd, onRefresh }: Props
       });
       onAdd();
 
-      setConfigFile(
-        clientConfig({
-          info: AppState.info!,
-          privateKey,
-          address: device.address,
-          presharedKey,
-          persistentKeepalive,
+      const ini = clientConfig({
+        info: AppState.info!,
+        privateKey,
+        address: device.address,
+        presharedKey,
+        persistentKeepalive,
+      });
+      setConfigFile(ini);
+      // One document for both protocols: the app imports it once and offers
+      // AmneziaWG and VLESS for this device.
+      setNativeDocument(
+        buildDeviceDocument({
+          ini,
+          description: '',
+          vless: vlessFromInfo(AppState.info),
+          vlessId: device.vlessId,
         }),
       );
       setDialogOpen(true);
@@ -269,7 +282,7 @@ export const AddDevice = observer(function AddDevice({ onAdd, onRefresh }: Props
           </Info>
         </DialogTitle>
         <DialogContent>
-          <GetConnected configFile={configFile!} showMobile={showMobile} />
+          <GetConnected configFile={configFile!} nativeDocument={nativeDocument} showMobile={showMobile} />
         </DialogContent>
         <DialogActions>
           <Button color="secondary" variant="outlined" onClick={() => setDialogOpen(false)}>
