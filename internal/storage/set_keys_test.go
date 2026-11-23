@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Replacing the key material of a device is how somebody whose private key
@@ -38,7 +40,7 @@ func TestSetKeys(t *testing.T) {
 			expires := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
 			device := &Device{
 				Owner: owner, Name: "laptop", PublicKey: testKey(owner + "old"),
-				PresharedKey: testKey(owner + "psk"), Address: "10.44.0.2/32",
+				PresharedKey: testKey(owner + "psk"), VLESSID: uuid.NewString(), Address: "10.44.0.2/32",
 				CreatedAt: time.Now(), Routes: "192.168.5.0/24", ExpiresAt: &expires,
 			}
 			if err := s.Save(device); err != nil {
@@ -50,20 +52,21 @@ func TestSetKeys(t *testing.T) {
 
 			newKey := testKey(owner + "new")
 			newPSK := testKey(owner + "newpsk")
-			changed, err := s.SetKeys(device, newKey, newPSK)
+			newVLESS := uuid.NewString()
+			changed, err := s.SetKeys(device, newKey, newPSK, newVLESS)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if changed.PublicKey != newKey || changed.PresharedKey != newPSK {
-				t.Errorf("the returned device still has the old keys: %+v", changed)
+			if changed.PublicKey != newKey || changed.PresharedKey != newPSK || changed.VLESSID != newVLESS {
+				t.Errorf("the returned device still has the old credentials: %+v", changed)
 			}
 
 			stored, err := s.Get(owner, "laptop")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if stored.PublicKey != newKey || stored.PresharedKey != newPSK {
-				t.Errorf("stored keys = %q/%q, want the new ones", stored.PublicKey, stored.PresharedKey)
+			if stored.PublicKey != newKey || stored.PresharedKey != newPSK || stored.VLESSID != newVLESS {
+				t.Errorf("stored credentials = %q/%q/%q, want the new ones", stored.PublicKey, stored.PresharedKey, stored.VLESSID)
 			}
 			// what a key change must not touch: everything the device is
 			// known by, and everything built around it
@@ -124,7 +127,7 @@ func TestSetKeysRefusesAKeyAnotherDeviceUses(t *testing.T) {
 			}
 			before := laptop.PublicKey
 
-			if _, err := s.SetKeys(laptop, taken, ""); err == nil {
+			if _, err := s.SetKeys(laptop, taken, "", uuid.NewString()); err == nil {
 				t.Fatal("two devices were given the same public key")
 			}
 

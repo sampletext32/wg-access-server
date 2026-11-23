@@ -43,6 +43,82 @@ func syncMetrics(d *DeviceManager, tracker *trafficTracker) {
 	if err := d.RecordMetadata(updates); err != nil {
 		logrus.Error(fmt.Errorf("failed to record device metadata during metadata sync: %w", err))
 	}
+
+	// The second protocol has its own counters and its own notion of "seen":
+	// it has no handshake, so traffic is the only proof that a device is in
+	// use.
+	d.syncProxyCounters()
+}
+
+// syncProxyCounters records what VLESS carried since the previous sync. The
+// counters are cumulative, keyed by the user id, and the rows are addressed by
+// public key - the mapping is kept in memory by the device manager, so this
+// needs no database read.
+func (d *DeviceManager) syncProxyCounters() {
+	if d.proxy == nil {
+		return
+	}
+	counters, err := d.proxy.Counters()
+	if err != nil {
+		logrus.Warn(fmt.Errorf("failed to read the VLESS counters: %w", err))
+		return
+	}
+	d.proxySeen.forgetAllBut(counters)
+
+	seenAt := time.Now()
+	var updates []storage.MetadataUpdate
+	for id, traffic := range counters {
+		publicKey := d.proxyPublicKey(id)
+		if publicKey == "" {
+			continue
+		}
+		// Uplink is what the client sent, so it is what this server
+		// received; downlink is the other way round.
+		receive, transmit := d.proxySeen.observe(id, traffic)
+		if receive == 0 && transmit == 0 {
+			continue
+		}
+		updates = append(updates, storage.MetadataUpdate{
+			PublicKey:     publicKey,
+			ReceiveBytes:  receive,
+			TransmitBytes: transmit,
+			SeenAt:        &seenAt,
+		})
+	}
+	if len(updates) == 0 {
+		return
+	}
+	if err := d.RecordMetadata(updates); err != nil {
+		logrus.Error(fmt.Errorf("failed to record the VLESS traffic: %w", err))
+	}
+}
+
+// proxyTrafficTracker remembers the second dataplane's counters as of the
+// previous sync. They are cumulative for the life of the Xray process, so the
+// traffic since then is the difference; a process restart resets them to zero,
+// which counterDelta treats as "everything now is new".
+type proxyTrafficTracker struct {
+	last map[string]ProxyTraffic
+}
+
+func newProxyTrafficTracker() *proxyTrafficTracker {
+	return &proxyTrafficTracker{last: map[string]ProxyTraffic{}}
+}
+
+func (t *proxyTrafficTracker) observe(id string, current ProxyTraffic) (int64, int64) {
+	previous := t.last[id]
+	t.last[id] = current
+	return counterDelta(previous.Uplink, current.Uplink), counterDelta(previous.Downlink, current.Downlink)
+}
+
+// forgetAllBut drops users that are gone, so a user id that is deleted and
+// later issued again starts from zero rather than from a stale reading.
+func (t *proxyTrafficTracker) forgetAllBut(counters map[string]ProxyTraffic) {
+	for id := range t.last {
+		if _, ok := counters[id]; !ok {
+			delete(t.last, id)
+		}
+	}
 }
 
 // collectMetadata turns one snapshot of this replica's WireGuard peers into

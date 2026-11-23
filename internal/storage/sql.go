@@ -335,6 +335,9 @@ func (s *SQLStorage) RecordMetadata(updates []MetadataUpdate) error {
 			columns["endpoint"] = update.Connection.Endpoint
 			columns["last_handshake_time"] = update.Connection.LastHandshakeTime
 		}
+		if update.SeenAt != nil {
+			columns["last_handshake_time"] = *update.SeenAt
+		}
 		if len(columns) == 0 {
 			continue
 		}
@@ -489,12 +492,12 @@ func (s *SQLStorage) Delete(device *Device) error {
 // SetKeys writes the key columns of one device. Like SetAccess it goes through
 // UpdateColumns and emits the event itself; the unique index on the public key
 // is what refuses a key another device already uses.
-func (s *SQLStorage) SetKeys(device *Device, publicKey string, presharedKey string) (*Device, error) {
+func (s *SQLStorage) SetKeys(device *Device, publicKey string, presharedKey string, vlessID string) (*Device, error) {
 	logrus.Debugf("setting the keys of device %s", key(device))
 
 	q := s.db.Model(&Device{}).
 		Where("owner = ? AND name = ?", device.Owner, device.Name).
-		UpdateColumns(map[string]interface{}{"public_key": publicKey, "preshared_key": presharedKey})
+		UpdateColumns(map[string]interface{}{"public_key": publicKey, "preshared_key": presharedKey, "vless_id": vlessID})
 	if q.Error != nil {
 		return nil, fmt.Errorf("failed to change the keys of the device: %w", q.Error)
 	}
@@ -505,6 +508,7 @@ func (s *SQLStorage) SetKeys(device *Device, publicKey string, presharedKey stri
 	changed := *device
 	changed.PublicKey = publicKey
 	changed.PresharedKey = presharedKey
+	changed.VLESSID = vlessID
 
 	// Postgres learns about this from the update trigger; the other backends
 	// are told here, and every replica then replaces the peer.

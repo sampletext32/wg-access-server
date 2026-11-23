@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/sampletext32/amneziawg-embed/pkg/wgembed"
 	"github.com/sirupsen/logrus"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
@@ -21,6 +22,29 @@ import (
 	"github.com/freifunkMUC/wg-access-server/internal/network"
 	"github.com/freifunkMUC/wg-access-server/internal/storage"
 )
+
+// ProxyDataplane is the second protocol as far as a device is concerned: a
+// user that is either there or not, and the traffic it has carried. Keeping it
+// this narrow is what lets the device manager stay out of the protocol's
+// business - it does not know about REALITY, ports or configuration files,
+// only that a device has an id on the other side that has to follow the
+// device's access.
+type ProxyDataplane interface {
+	Upsert(id string) error
+	Remove(id string) error
+	// Counters returns what each user has carried since the process started,
+	// keyed by the user id. The values are cumulative, so the caller keeps
+	// the previous reading and records the difference.
+	Counters() (map[string]ProxyTraffic, error)
+}
+
+// ProxyTraffic is one user's counters on the second dataplane, in the
+// direction the server sees them: uplink arrives from the client, downlink is
+// sent to it.
+type ProxyTraffic struct {
+	Uplink   int64
+	Downlink int64
+}
 
 type DeviceManager struct {
 	wg      wgembed.WireGuardInterface
@@ -38,6 +62,19 @@ type DeviceManager struct {
 	firewallSync func(FirewallState) error
 	firewallMu   sync.Mutex
 	firewall     FirewallState
+
+	// proxy is the second protocol's dataplane. Nil when the server does not
+	// serve one, which is why every use goes through the helpers below
+	// rather than being called directly.
+	proxy ProxyDataplane
+
+	// proxyKeys maps a device's VLESS id to its WireGuard public key, which
+	// is how the counters that dataplane reports find their device: the rows
+	// are addressed by public key, the counters by id. proxySeen remembers
+	// the previous reading, because those counters are cumulative.
+	proxyMu   sync.Mutex
+	proxyKeys map[string]string
+	proxySeen *proxyTrafficTracker
 
 	// resync asks for everything to be brought in line with storage. It has
 	// one slot: one runs at a time and one more is remembered.
@@ -62,6 +99,15 @@ func WithMaxDevicesPerUser(max int) Option {
 func WithFirewallSync(sync func(FirewallState) error) Option {
 	return func(d *DeviceManager) {
 		d.firewallSync = sync
+	}
+}
+
+// WithProxyDataplane registers the second protocol: every device gets a user
+// there, under the device's VLESS id, and loses it when the device may not
+// connect any more.
+func WithProxyDataplane(proxy ProxyDataplane) Option {
+	return func(d *DeviceManager) {
+		d.proxy = proxy
 	}
 }
 
@@ -127,7 +173,12 @@ func validateDeviceName(name string) error {
 }
 
 func New(wg wgembed.WireGuardInterface, s storage.Storage, cidr, cidrv6 string, opts ...Option) *DeviceManager {
-	d := &DeviceManager{wg: wg, storage: s, cidr: cidr, cidrv6: cidrv6, resync: make(chan struct{}, 1)}
+	d := &DeviceManager{
+		wg: wg, storage: s, cidr: cidr, cidrv6: cidrv6,
+		resync:    make(chan struct{}, 1),
+		proxyKeys: make(map[string]string),
+		proxySeen: newProxyTrafficTracker(),
+	}
 	for _, opt := range opts {
 		opt(d)
 	}
@@ -164,6 +215,7 @@ func (d *DeviceManager) StartSync(ctx context.Context, enableMetadataCollection,
 		if err := d.wg.RemovePeer(device.PublicKey); err != nil {
 			logrus.Error(fmt.Errorf("failed to remove WireGuard peer: %w", err))
 		}
+		d.dropProxyUser(device)
 		d.Resync()
 	})
 
@@ -390,8 +442,12 @@ func (d *DeviceManager) addDeviceLocked(identity *authsession.Identity, name str
 		Name:          name,
 		PublicKey:     publicKey,
 		PresharedKey:  presharedKey,
-		Address:       clientAddr,
-		CreatedAt:     time.Now(),
+		// The second protocol's credential. It is generated with the device
+		// rather than when a client first asks for it, so that a device has
+		// exactly one identity per protocol for its whole life.
+		VLESSID:   uuid.NewString(),
+		Address:   clientAddr,
+		CreatedAt: time.Now(),
 	}
 
 	if err := d.SaveDevice(device); err != nil {
@@ -442,6 +498,19 @@ func (d *DeviceManager) sync() error {
 		}
 	}
 
+	// The second protocol has no interface to compare against: a user is
+	// either in the process or not, and telling it about every allowed device
+	// again is cheap because that dataplane remembers what it has. A device
+	// that may not connect loses its user here as well as in the callbacks,
+	// so a sync after a missed event reaches the same state.
+	for _, device := range devices {
+		if !allowed[device.PublicKey] {
+			d.dropProxyUser(device)
+			continue
+		}
+		d.syncProxyUser(device)
+	}
+
 	// Add peers for the devices the interface does not already carry as they
 	// are stored. Configuring one is a round trip to the kernel, and a sync
 	// after a storage reconnect finds almost everything in place already.
@@ -475,9 +544,56 @@ func (d *DeviceManager) applyPeer(device *storage.Device) error {
 		if err := d.wg.RemovePeer(device.PublicKey); err != nil {
 			return fmt.Errorf("failed to remove the peer of a device that may not connect: %w", err)
 		}
+		d.dropProxyUser(device)
 		return nil
 	}
+	d.syncProxyUser(device)
 	return d.wg.AddPeer(device.PublicKey, device.PresharedKey, device.AllowedIPs())
+}
+
+// syncProxyUser gives the device its user on the second protocol. A failure is
+// logged rather than returned: the device's WireGuard peer is what most clients
+// use, and a VLESS process that is down or restarting must not stop the rest of
+// the server from working. The reconciler in that dataplane adds the user once
+// it is back.
+func (d *DeviceManager) syncProxyUser(device *storage.Device) {
+	if d.proxy == nil || device.VLESSID == "" {
+		return
+	}
+	if err := d.proxy.Upsert(device.VLESSID); err != nil {
+		logrus.Errorf("failed to add the VLESS user %s: %v", device.VLESSID, err)
+		return
+	}
+	d.proxyMu.Lock()
+	d.proxyKeys[device.VLESSID] = device.PublicKey
+	d.proxyMu.Unlock()
+}
+
+// dropProxyUser takes the device's user off the second protocol. Same reasoning
+// as above, in the other direction: a device that may not connect must not keep
+// working over VLESS because that dataplane failed to hear about it.
+func (d *DeviceManager) dropProxyUser(device *storage.Device) {
+	d.dropProxyUserID(device.VLESSID)
+}
+
+func (d *DeviceManager) dropProxyUserID(id string) {
+	if d.proxy == nil || id == "" {
+		return
+	}
+	if err := d.proxy.Remove(id); err != nil {
+		logrus.Errorf("failed to remove the VLESS user %s: %v", id, err)
+	}
+	d.proxyMu.Lock()
+	delete(d.proxyKeys, id)
+	d.proxyMu.Unlock()
+}
+
+// proxyPublicKey is the device a user id belongs to, empty for one this
+// replica does not know - a counter for a user whose device is gone.
+func (d *DeviceManager) proxyPublicKey(id string) string {
+	d.proxyMu.Lock()
+	defer d.proxyMu.Unlock()
+	return d.proxyKeys[id]
 }
 
 // peerMatches reports whether the interface carries the device as it is
@@ -662,7 +778,11 @@ func (d *DeviceManager) RotateDeviceKey(user string, name string, publicKey stri
 	}
 
 	previous := device.PublicKey
-	changed, err := d.storage.SetKeys(device, publicKey, presharedKey)
+	previousVLESS := device.VLESSID
+	// Rotating the key rotates the VLESS id with it: both credentials belong
+	// to the same person, and replacing one while the other keeps working
+	// would leave whoever had the old one with access.
+	changed, err := d.storage.SetKeys(device, publicKey, presharedKey, uuid.NewString())
 	if err != nil {
 		return nil, fmt.Errorf("failed to change the keys of the device: %w", err)
 	}
@@ -673,6 +793,7 @@ func (d *DeviceManager) RotateDeviceKey(user string, name string, publicKey stri
 	if err := d.wg.RemovePeer(previous); err != nil {
 		logrus.Warn(fmt.Errorf("failed to remove the peer of the replaced key: %w", err))
 	}
+	d.dropProxyUserID(previousVLESS)
 	if err := d.applyPeer(changed); err != nil {
 		logrus.Warn(fmt.Errorf("failed to add the peer of the new key: %w", err))
 	}

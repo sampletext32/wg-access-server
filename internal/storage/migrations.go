@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -186,6 +187,35 @@ var migrations = []migration{
 			return db.Migrator().AlterColumn(&deviceV4{}, "Routes")
 		},
 	},
+	{
+		// The second protocol, VLESS, identifies a client by a UUID rather
+		// than by a WireGuard key pair. Every device gets one, including the
+		// devices that existed before there was a second protocol: a device
+		// that has a peer but no UUID could use only one of the two, and
+		// "some devices are half-configured" is a state nobody wants to
+		// explain. The values are generated here rather than left empty, so
+		// that a missing UUID never becomes a legal state that the dataplane
+		// code has to defend against.
+		id: "0016_device_vless_id",
+		apply: func(db *gorm.DB) error {
+			if err := db.AutoMigrate(&deviceV5{}); err != nil {
+				return err
+			}
+			var existing []deviceV5
+			if err := db.Select("owner", "name").
+				Where("vless_id IS NULL OR vless_id = ''").Find(&existing).Error; err != nil {
+				return err
+			}
+			for _, device := range existing {
+				if err := db.Model(&deviceV5{}).
+					Where("owner = ? AND name = ?", device.Owner, device.Name).
+					Update("vless_id", uuid.NewString()).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	},
 }
 
 type migration struct {
@@ -358,6 +388,32 @@ type deviceV4 struct {
 }
 
 func (deviceV4) TableName() string {
+	return "devices"
+}
+
+// deviceV5 is the devices table as 0016_device_vless_id left it: deviceV4 plus
+// the device's VLESS user id.
+type deviceV5 struct {
+	Owner             string `gorm:"type:varchar(100);primaryKey"`
+	OwnerName         string
+	OwnerEmail        string
+	OwnerProvider     string
+	Name              string `gorm:"type:varchar(100);primaryKey"`
+	PublicKey         string `gorm:"uniqueIndex:uix_devices_public_key"`
+	PresharedKey      string `gorm:"type:varchar(100)"`
+	VLESSID           string `gorm:"type:varchar(36);uniqueIndex:uix_devices_vless_id"`
+	Address           string
+	CreatedAt         time.Time `gorm:"column:created_at"`
+	Disabled          bool
+	ExpiresAt         *time.Time
+	Routes            string `gorm:"type:text"`
+	LastHandshakeTime *time.Time
+	ReceiveBytes      int64
+	TransmitBytes     int64
+	Endpoint          string
+}
+
+func (deviceV5) TableName() string {
 	return "devices"
 }
 

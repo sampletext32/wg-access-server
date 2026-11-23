@@ -83,6 +83,10 @@ func (s *InMemoryStorage) RecordMetadata(updates []MetadataUpdate) error {
 			device.Endpoint = update.Connection.Endpoint
 			device.LastHandshakeTime = &handshake
 		}
+		if update.SeenAt != nil {
+			seen := *update.SeenAt
+			device.LastHandshakeTime = &seen
+		}
 	}
 	return nil
 }
@@ -232,8 +236,8 @@ func (s *InMemoryStorage) setRoutes(device *Device, routes string) (*Device, err
 // SetKeys writes the key material of one device, like SetAccess writes whether
 // it may connect. A public key another device already uses is refused here as
 // the unique index refuses it in the SQL backends.
-func (s *InMemoryStorage) SetKeys(device *Device, publicKey string, presharedKey string) (*Device, error) {
-	changed, err := s.setKeys(device, publicKey, presharedKey)
+func (s *InMemoryStorage) SetKeys(device *Device, publicKey string, presharedKey string, vlessID string) (*Device, error) {
+	changed, err := s.setKeys(device, publicKey, presharedKey, vlessID)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +247,7 @@ func (s *InMemoryStorage) SetKeys(device *Device, publicKey string, presharedKey
 	return changed, nil
 }
 
-func (s *InMemoryStorage) setKeys(device *Device, publicKey string, presharedKey string) (*Device, error) {
+func (s *InMemoryStorage) setKeys(device *Device, publicKey string, presharedKey string, vlessID string) (*Device, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -261,6 +265,7 @@ func (s *InMemoryStorage) setKeys(device *Device, publicKey string, presharedKey
 	changed := *stored
 	changed.PublicKey = publicKey
 	changed.PresharedKey = presharedKey
+	changed.VLESSID = vlessID
 	s.db[key(&changed)] = &changed
 	return &changed, nil
 }

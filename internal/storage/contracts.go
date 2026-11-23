@@ -53,7 +53,11 @@ type Storage interface {
 	// public key another device already uses is refused - two devices
 	// sharing one would share a peer. Like SetAccess it emits an update
 	// event, which is how every replica replaces the peer.
-	SetKeys(device *Device, publicKey string, presharedKey string) (*Device, error)
+	//
+	// The VLESS id changes with the key: both are the device's credentials,
+	// and "the old key stops working" has to mean the old credential of
+	// every protocol, or whoever copied one keeps their access.
+	SetKeys(device *Device, publicKey string, presharedKey string, vlessID string) (*Device, error)
 	List(owner string) ([]*Device, error)
 	// Addresses returns the address field of every device. Picking an address
 	// for a new device only needs to know which ones are taken, and reading
@@ -249,6 +253,11 @@ type MetadataUpdate struct {
 	// Connection is set only by the replica currently serving the peer; nil
 	// leaves the stored endpoint and last handshake untouched.
 	Connection *PeerConnection
+	// SeenAt is when the second dataplane, VLESS, last carried traffic for
+	// the device. It refreshes the last-seen time the panel shows without
+	// touching the endpoint, which only WireGuard can report: a device used
+	// over VLESS has no wire to name.
+	SeenAt *time.Time
 }
 
 // PeerConnection is the connection state reported by the replica a peer is
@@ -276,7 +285,14 @@ type Device struct {
 	// enforces that.
 	PublicKey    string    `json:"public_key" gorm:"uniqueIndex:uix_devices_public_key"`
 	PresharedKey string    `json:"preshared_key" gorm:"type:varchar(100)"`
-	Address      string    `json:"address"`
+	// VLESSID is the device's user id on the Xray dataplane. It exists for
+	// every device, not only for the ones that use VLESS: the second protocol
+	// identifies a client by a UUID rather than by a key pair, and one device
+	// has one identity per protocol, so deleting, disabling or re-keying a
+	// device reaches both - there is no state in which a device keeps a
+	// working credential the panel does not know about.
+	VLESSID string `json:"vless_id" gorm:"type:varchar(36);uniqueIndex:uix_devices_vless_id"`
+	Address string `json:"address"`
 	CreatedAt    time.Time `json:"created_at" gorm:"column:created_at"`
 
 	/**
